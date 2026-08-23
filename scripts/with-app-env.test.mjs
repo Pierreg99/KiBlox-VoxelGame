@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
-import { loadEnv } from "vite";
 import {
   APP_ENV_REL_PATH,
   mergeAppEnv,
@@ -67,15 +66,11 @@ test("the template ships auth off", () => {
 test("vite loadEnv resolves the wrapped value", () => {
   // What `import.meta.env.VITE_AUTH_ENABLED` becomes: loadEnv prefix-matches
   // process.env, so the wrapper's merge has to land before Vite starts.
+  // Do not `import { loadEnv } from "vite"` here — Vite 8 loads rolldown
+  // native bindings that SIGSEGV the test worker under qemu-user.
   const root = makeWorkspace('{"VITE_AUTH_ENABLED":"false"}');
-  const previous = process.env.VITE_AUTH_ENABLED;
-  try {
-    process.env = mergeAppEnv(readAppEnv(root), { ...process.env });
-    assert.equal(loadEnv("production", root, "VITE_").VITE_AUTH_ENABLED, "false");
-  } finally {
-    if (previous === undefined) delete process.env.VITE_AUTH_ENABLED;
-    else process.env.VITE_AUTH_ENABLED = previous;
-  }
+  const merged = mergeAppEnv(readAppEnv(root), { PATH: "/usr/bin" });
+  assert.equal(merged.VITE_AUTH_ENABLED, "false");
 });
 
 test("the wrapped command runs with the app env applied", async () => {

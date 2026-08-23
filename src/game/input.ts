@@ -62,6 +62,7 @@ export class Input {
   kiHeld = false;
   scrollAcc = 0;
   dragging = false;
+  dragDist = 0;
   touchMove = { x: 0, y: 0 };
   touchLook = { x: 0, y: 0 };
   touchJump = false;
@@ -132,6 +133,7 @@ export class Input {
         if (this.dragging) {
           this.mouseDx += ev.movementX;
           this.mouseDy += ev.movementY;
+          this.dragDist += Math.hypot(ev.movementX, ev.movementY);
         }
       },
     );
@@ -144,6 +146,7 @@ export class Input {
       }
       if (ev.pointerType === "mouse" && ev.button === 0) {
         this.dragging = true;
+        this.dragDist = 0;
         try {
           el.setPointerCapture(ev.pointerId);
         } catch {
@@ -215,6 +218,9 @@ export class Input {
 
     const gp = typeof navigator !== "undefined" ? navigator.getGamepads?.()[0] : null;
     if (gp && gp.mapping === "standard") {
+      const pressedN = gp.buttons.reduce((n, b) => n + (b?.pressed ? 1 : 0), 0);
+      const ghost = pressedN >= 6;
+      if (!ghost) {
       const st = radial(gp.axes[0] ?? 0, gp.axes[1] ?? 0);
       mx += st.x;
       my -= st.y;
@@ -238,6 +244,7 @@ export class Input {
       this.prevPadKi = !!(gp.buttons[7]?.pressed || gp.buttons[5]?.pressed);
       this.prevPadPunch = !!gp.buttons[2]?.pressed;
       this.prevPadDash = !!gp.buttons[1]?.pressed;
+      }
     }
 
     const mag = Math.hypot(mx, my);
@@ -261,10 +268,11 @@ export class Input {
 
     a.flyDown = k.has("ControlLeft") || k.has("ControlRight") || k.has("KeyC") || this.touchDown;
     a.sprint = k.has("ShiftLeft") || k.has("ShiftRight");
-    // In fly mode Shift is descend — engine decides. Also map Shift as flyDown when flying.
 
-    a.punch = this.punchHeld || this.touchPunch || a.punch;
-    a.punchPressed = this.punchEdge || this.touchPunchPressed || a.punchPressed;
+    const locked = document.pointerLockElement === this.el;
+    a.punch = this.touchPunch || a.punch || (this.punchHeld && (locked || this.dragDist < 10));
+    a.punchPressed =
+      this.touchPunchPressed || a.punchPressed || (this.punchEdge && (locked || this.dragDist < 10));
     this.punchEdge = false;
     this.touchPunchPressed = false;
 
@@ -302,10 +310,10 @@ export class Input {
     return a;
   }
 
-  private prevPadA = false;
-  private prevPadKi = false;
-  private prevPadPunch = false;
-  private prevPadDash = false;
+  private prevPadA = true;
+  private prevPadKi = true;
+  private prevPadPunch = true;
+  private prevPadDash = true;
   touchJumpPressed = false;
   touchPunchPressed = false;
   touchPlacePressed = false;

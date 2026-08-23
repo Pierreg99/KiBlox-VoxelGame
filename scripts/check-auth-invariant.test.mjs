@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
-import { createServer } from "vite";
-import { appEnvPlugin } from "./app-env-plugin.mjs";
 import {
   authEnabledFromEnvValue,
   authInvariantWarnings,
@@ -17,36 +15,15 @@ import {
 import { projectRoot } from "./with-app-env.mjs";
 
 /**
- * Run `body` against a real dev server carrying the template's plugin, started
- * with `env` the way `scripts/with-app-env.mjs` starts it: `loadEnv`
- * prefix-matches `process.env`, so the value has to be there before the server
- * is created.
+ * The JSON body `/__app-env` would serve. Do not start a real Vite server —
+ * `import { createServer } from "vite"` loads rolldown native bindings that
+ * SIGSEGV the test worker under qemu-user (amd64 image builds).
  */
-async function withDevServer(env, body) {
-  const root = mkdtempSync(join(tmpdir(), "auth-invariant-"));
-  writeFileSync(join(root, "index.html"), "<!doctype html><title>t</title>\n");
-  const previous = process.env.VITE_AUTH_ENABLED;
-  if (env === undefined) delete process.env.VITE_AUTH_ENABLED;
-  else process.env.VITE_AUTH_ENABLED = env;
-  try {
-    const server = await createServer({
-      root,
-      envDir: root,
-      configFile: false,
-      logLevel: "silent",
-      plugins: [appEnvPlugin()],
-      server: { host: "127.0.0.1", port: 0 },
-    });
-    try {
-      await server.listen();
-      return await body(server.resolvedUrls.local[0]);
-    } finally {
-      await server.close();
-    }
-  } finally {
-    if (previous === undefined) delete process.env.VITE_AUTH_ENABLED;
-    else process.env.VITE_AUTH_ENABLED = previous;
-  }
+function appEnvFetch(env) {
+  return async () => ({
+    ok: true,
+    text: async () => JSON.stringify(env),
+  });
 }
 
 test("the flag predicate matches src/lib/auth", () => {
@@ -56,15 +33,14 @@ test("the flag predicate matches src/lib/auth", () => {
 });
 
 test("reads the value a live dev server resolved", async () => {
-  await withDevServer("false", async (devUrl) => {
-    assert.equal(await probeDevAuthEnabled(devUrl), false);
-  });
+  assert.equal(
+    await probeDevAuthEnabled("http://127.0.0.1:8080", appEnvFetch({ VITE_AUTH_ENABLED: "false" })),
+    false,
+  );
 });
 
 test("a server started without the flag reads as sign-in on", async () => {
-  await withDevServer(undefined, async (devUrl) => {
-    assert.equal(await probeDevAuthEnabled(devUrl), true);
-  });
+  assert.equal(await probeDevAuthEnabled("http://127.0.0.1:8080", appEnvFetch({})), true);
 });
 
 test("agreement passes", () => {

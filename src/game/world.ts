@@ -198,19 +198,7 @@ export class World {
     this.spawn.z = hz - 4.5;
     this.spawn.y = height[hx + (hz - 4) * SX]! + 2;
 
-    // Dragon balls — ring around the map, on the surface
-    this.balls = [];
-    for (let i = 0; i < BALL_COUNT; i++) {
-      const ang = (i / BALL_COUNT) * Math.PI * 2 + rngB() * 0.4;
-      const rad = 22 + rngB() * 32;
-      let x = (hx + Math.cos(ang) * rad) | 0;
-      let z = (hz + Math.sin(ang) * rad) | 0;
-      x = Math.max(4, Math.min(SX - 5, x));
-      z = Math.max(4, Math.min(SZ - 5, z));
-      let y = height[x + z * SX]! + 1;
-      while (y < SY - 2 && this.isSolid(x, y, z)) y++;
-      this.balls.push({ id: i, x: x + 0.5, y: y + 0.35, z: z + 0.5, stars: i + 1, taken: false });
-    }
+    this.scatterBalls(rngB);
 
     this.enemies = [];
     for (let i = 0; i < 16; i++) {
@@ -229,6 +217,30 @@ export class World {
         power: 700 + ((rngE() * 1800) | 0) + (kind === "flyer" ? 400 : 0),
         kind,
       });
+    }
+  }
+
+  surfaceY(x: number, z: number) {
+    for (let y = SY - 2; y >= 1; y--) {
+      if (this.isSolid(x, y, z) && !this.isSolid(x, y + 1, z)) return y + 1;
+    }
+    return SEA_LEVEL + 1;
+  }
+
+  scatterBalls(rng: () => number) {
+    const hx = (SX / 2) | 0;
+    const hz = (SZ / 2) | 0;
+    this.balls = [];
+    for (let i = 0; i < BALL_COUNT; i++) {
+      const ang = (i / BALL_COUNT) * Math.PI * 2 + rng() * 0.4;
+      const rad = 22 + rng() * 32;
+      let x = (hx + Math.cos(ang) * rad) | 0;
+      let z = (hz + Math.sin(ang) * rad) | 0;
+      x = Math.max(4, Math.min(SX - 5, x));
+      z = Math.max(4, Math.min(SZ - 5, z));
+      let y = this.surfaceY(x, z);
+      while (y < SY - 2 && this.isSolid(x, y, z)) y++;
+      this.balls.push({ id: i, x: x + 0.5, y: y + 0.35, z: z + 0.5, stars: i + 1, taken: false });
     }
   }
 

@@ -21,6 +21,7 @@
  */
 import { spawn } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
+import { constants as osConstants } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -64,6 +65,23 @@ export function mergeAppEnv(appEnv, processEnv) {
   return { ...appEnv, ...processEnv };
 }
 
+/**
+ * Translate a child's `exit` `(code, signal)` into this process's exit status.
+ *
+ * Do not re-raise the signal with `process.kill(process.pid, signal)`: under
+ * qemu-user (amd64 image builds on an arm host) a self-directed signal is
+ * routinely delivered as SIGSEGV to the wrong process, which takes down the
+ * test worker and fails the image build. `128 + signo` is what a shell reports
+ * for a signal-killed command, so a cancelled `vite build` is still a failure.
+ */
+export function exitStatusFromChild(code, signal) {
+  if (signal) {
+    const signo = osConstants.signals[signal];
+    return 128 + (typeof signo === "number" ? signo : 1);
+  }
+  return code ?? 1;
+}
+
 /** The workspace root (this file lives in `<root>/scripts/`). */
 export function projectRoot() {
   return dirname(dirname(fileURLToPath(import.meta.url)));
@@ -103,15 +121,7 @@ function main(argv) {
     process.exit(127);
   });
   child.on("exit", (code, signal) => {
-    if (signal) {
-      // Die the same way the child did, so an interrupted build is never
-      // reported as success. The handler above has to go first or it catches
-      // the re-raised signal and the wrapper falls through to exit 0.
-      process.removeAllListeners(signal);
-      process.kill(process.pid, signal);
-      return;
-    }
-    process.exit(code ?? 1);
+    process.exit(exitStatusFromChild(code, signal));
   });
 }
 

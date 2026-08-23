@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode, type RefObject } from "react";
 import {
   Crosshair,
   Pause,
@@ -12,7 +12,7 @@ import {
   FastForward,
 } from "lucide-react";
 import type { GameEngine } from "@/game/engine";
-import { BLOCK_NAMES, DIRT, GRASS, KI, SSJ_POWER, STONE, WOOD } from "@/game/constants";
+import { DIRT, GRASS, KI, SSJ_POWER, STONE, WOOD } from "@/game/constants";
 import { useHud } from "@/game/store";
 
 export function GameApp() {
@@ -57,7 +57,7 @@ function Hud({
   engineRef,
   ready,
 }: {
-  engineRef: React.RefObject<GameEngine | null>;
+  engineRef: RefObject<GameEngine | null>;
   ready: boolean;
 }) {
   const hud = useHud();
@@ -65,7 +65,7 @@ function Hud({
 
   return (
     <>
-      {(hud.phase === "playing" || hud.phase === "paused") && <PlayHud />}
+      {(hud.phase === "playing" || hud.phase === "paused") && <PlayHud engineRef={engineRef} />}
       {hud.phase === "playing" && hud.isTouch && <TouchPad engineRef={engineRef} />}
       {hud.phase === "loading" && <LoadingOverlay progress={hud.loadProgress} />}
       {hud.phase === "title" && <TitleOverlay engine={e} ready={ready} />}
@@ -76,7 +76,7 @@ function Hud({
   );
 }
 
-function PlayHud() {
+function PlayHud({ engineRef }: { engineRef: RefObject<GameEngine | null> }) {
   const hud = useHud();
   const hp = Math.max(0, hud.health / hud.maxHealth);
   return (
@@ -169,7 +169,7 @@ function PlayHud() {
         />
       )}
 
-      <div className="absolute bottom-5 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2 pb-[env(safe-area-inset-bottom)] sm:bottom-7 max-sm:bottom-52">
+      <div className="absolute bottom-5 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2 pb-[env(safe-area-inset-bottom)] sm:bottom-7 max-sm:bottom-60">
         {hud.target && (
           <span className="rounded-full bg-surface/80 px-2.5 py-0.5 text-xs text-muted ring-1 ring-border">
             {hud.target}
@@ -181,32 +181,34 @@ function PlayHud() {
             <div className="h-full bg-accent" style={{ width: `${hud.mining * 100}%` }} />
           </div>
         )}
-        <div className="flex items-end gap-1.5 rounded-xl bg-surface/85 p-1.5 ring-1 ring-border">
+        <div className="pointer-events-auto relative z-30 flex items-end gap-1.5 rounded-xl bg-surface/85 p-1.5 ring-1 ring-border">
           {hud.hotbar.map((id, i) => (
-            <div
+            <button
+              type="button"
               key={`${id}-${i}`}
+              aria-label={`Slot ${i + 1}`}
+              onPointerDown={(ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                engineRef.current?.selectSlot(i);
+              }}
               className={`flex h-11 w-11 items-center justify-center rounded-lg ${
                 i === hud.selected ? "ring-1 ring-accent" : "opacity-70"
               }`}
             >
               <span className={`block h-7 w-7 rounded-sm ${blockSwatch(id)}`} />
-            </div>
+            </button>
           ))}
         </div>
         <p className="hidden text-[11px] text-subtle sm:block">
-          {hud.flying ? "Flug" : "Boden"}
+          {hud.flying ? "Flug · Leertaste steigen · Shift sinken" : "Boden"}
           {hud.superSaiyan ? " · Super Saiyan" : hud.ssjReady ? " · F Super Saiyan" : ""}
           {hud.dashReady ? " · R Dash" : " · Dash lädt"}
           {" · "}
           {hud.ballsGot}/7 Kugeln
+          {!hud.isTouch ? " · ESC Pause" : ""}
         </p>
       </div>
-
-      {!hud.isTouch && hud.phase === "playing" && (
-        <p className="pointer-events-none absolute bottom-24 left-1/2 hidden -translate-x-1/2 text-[11px] text-subtle sm:block">
-          ESC Pause · Ziehen oder Klick zum Umsehen
-        </p>
-      )}
     </div>
   );
 }
@@ -273,7 +275,7 @@ function TitleOverlay({
           <button
             type="button"
             disabled={!ready}
-            onClick={() => engine()?.playFromTitle(hud.hasSave ? "continue" : "new")}
+            onClick={() => engine()?.playFromTitle("continue")}
             className="h-12 rounded-lg bg-accent px-5 font-display text-2xl tracking-wide text-accent-fg transition-transform duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
           >
             {hud.hasSave ? "Fortsetzen" : "Spielen"}
@@ -298,12 +300,12 @@ function TitleOverlay({
           </button>
         </div>
         <p className="mt-4 text-xs leading-relaxed text-subtle sm:hidden">
-          Stick links, Blick rechts. Flug, Schlag, Ki halten, Dash. Sieben Kugeln.
+          Stick links, Blick rechts. Flug halten = steigen, loslassen = sinken. Hotbar antippen.
         </p>
         <ul className="mt-6 hidden space-y-1 text-xs leading-relaxed text-subtle sm:block">
-          <li>WASD bewegen · Maus umsehen · Leertaste springen, nochmal fliegen</li>
-          <li>Halten abbauen · Rechtsklick setzen · Q halten, loslassen für Ki-Stoß</li>
-          <li>R Dash · F Super Saiyan ab {SSJ_POWER.toLocaleString("de-DE")} Ki · ESC Pause</li>
+          <li>WASD bewegen · Maus umsehen · Leertaste springen, in der Luft nochmal: Flug</li>
+          <li>Flug: Leertaste steigen · Shift/Strg sinken · Halten abbauen · Rechtsklick setzen</li>
+          <li>Q halten, loslassen für Ki-Stoß · R Dash · F Super Saiyan · 1–5 Blöcke · ESC Pause</li>
         </ul>
       </div>
     </div>
@@ -394,7 +396,7 @@ function DeadOverlay({ engine }: { engine: () => GameEngine | null }) {
   );
 }
 
-function TouchPad({ engineRef }: { engineRef: React.RefObject<GameEngine | null> }) {
+function TouchPad({ engineRef }: { engineRef: RefObject<GameEngine | null> }) {
   const stickRef = useRef<HTMLDivElement>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
   const lookId = useRef<number | null>(null);
@@ -553,7 +555,7 @@ function TouchBtn({
   onUp,
 }: {
   label: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   onDown: () => void;
   onUp?: () => void;
 }) {
@@ -584,7 +586,7 @@ function blockSwatch(id: number) {
 }
 
 function moveStick(
-  ev: React.PointerEvent,
+  ev: PointerEvent,
   el: HTMLDivElement | null,
   setKnob: (v: { x: number; y: number }) => void,
   setMove: (x: number, y: number) => void,

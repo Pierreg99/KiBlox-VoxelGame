@@ -47,7 +47,7 @@ import { clearSave, hasSave, loadSave, writeSave, type SaveData } from "./save";
 import type { Phase } from "./store";
 import { useHud } from "./store";
 import { createAtlasTexture, createBallTexture } from "./textures";
-import { aabbHitsWorld, chunkCoords, raycastVoxels, World, type EnemyKind } from "./world";
+import { aabbHitsWorld, chunkCoords, chunkKey, raycastVoxels, World, type EnemyKind } from "./world";
 
 type Enemy = {
   mesh: THREE.Group;
@@ -283,7 +283,8 @@ export class GameEngine {
 
   private bootHud() {
     const touch =
-      window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+      window.matchMedia("(pointer: coarse)").matches ||
+      (navigator.maxTouchPoints > 0 && window.matchMedia("(hover: none)").matches);
     useHud.getState().patch({
       hasSave: hasSave(),
       isTouch: touch,
@@ -372,7 +373,8 @@ export class GameEngine {
   }
 
   private rebuildChunk(cx: number, cy: number, cz: number) {
-    const key = cx + cy * 64 + cz * 64 * 8;
+    if (cx < 0 || cy < 0 || cz < 0 || cx >= CX || cy >= CY || cz >= CZ) return;
+    const key = chunkKey(cx, cy, cz);
     const old = this.chunkMeshes.get(key);
     if (old) {
       this.scene.remove(old);
@@ -480,11 +482,13 @@ export class GameEngine {
 
   private spawnEntities() {
     for (const t of this.ballTex) t.dispose();
+    const ballGeos = new Set<THREE.BufferGeometry>();
     for (const m of this.ballMeshes) {
       this.scene.remove(m);
-      m.geometry.dispose();
+      ballGeos.add(m.geometry);
       (m.material as THREE.Material).dispose();
     }
+    for (const g of ballGeos) g.dispose();
     this.ballMeshes = [];
     this.ballTex = [];
     const geo = new THREE.SphereGeometry(0.28, 16, 12);
@@ -505,11 +509,25 @@ export class GameEngine {
       this.ballMeshes.push(mesh);
     }
 
-    for (const e of this.enemies) this.scene.remove(e.mesh);
+    for (const e of this.enemies) {
+      this.scene.remove(e.mesh);
+      e.mesh.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          const mat = o.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+    }
     this.enemies = [];
     for (const s of this.world.enemies) {
       this.enemies.push(this.makeEnemy(s.x, s.y, s.z, s.power, s.kind));
     }
+
+    this.clearPool(this.blasts);
+    this.clearPool(this.orbs);
+    this.clearPool(this.debris);
 
     const blastGeo = new THREE.SphereGeometry(0.16, 10, 8);
     this.blasts = [];
@@ -561,6 +579,19 @@ export class GameEngine {
       this.scene.add(mesh);
       this.debris.push({ mesh, vx: 0, vy: 0, vz: 0, life: 0, active: false });
     }
+  }
+
+  private clearPool(list: { mesh: THREE.Mesh }[]) {
+    const geos = new Set<THREE.BufferGeometry>();
+    for (const item of list) {
+      this.scene.remove(item.mesh);
+      geos.add(item.mesh.geometry);
+      const mat = item.mesh.material;
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+      else mat.dispose();
+    }
+    for (const g of geos) g.dispose();
+    list.length = 0;
   }
 
   private makeEnemy(x: number, y: number, z: number, power: number, kind: EnemyKind = "grunt"): Enemy {
@@ -621,41 +652,70 @@ export class GameEngine {
 
   playFromTitle(mode: "new" | "continue") {
     this.audio.unlock();
+    this.requestLock();
     if (mode === "new") {
-      clearSave();
-      this.edits = [];
-      this.power = START_POWER;
-      this.health = MAX_HEALTH;
-      this.flying = false;
-      this.superSaiyan = false;
-      this.selected = 0;
-      this.px = this.world.spawn.x;
-      this.py = this.world.spawn.y;
-      this.pz = this.world.spawn.z;
-      this.yaw = 0;
-      this.pitch = -0.22;
-      this.vx = this.vy = this.vz = 0;
-      this.energy = MAX_ENERGY;
-      this.charge = 0;
-      this.combo = 0;
-      for (const b of this.world.balls) b.taken = false;
-      for (const m of this.ballMeshes) m.visible = true;
-      for (const e of this.enemies) {
-        if (!e.alive) {
-          e.alive = true;
-          e.hp = e.maxHp;
-          e.mesh.visible = true;
-        }
-      }
+      void this.resetSameWorld();
+      return;
     }
+    this.input.enabled = true;
+    this.invuln = Math.max(this.invuln, 1.4);
+    this.setPhase("playing");
+    this.toast("Sammle die sieben Drachenkugeln");
+  }
+
+  private async resetSameWorld() {
+    clearSave();
+    useHud.getState().patch({ phase: "loading", loadProgress: 0.08, hasSave: false });
+    this.input.enabled = false;
+    const seed = this.world.seed;
+    this.clearChunks();
+    this.world = new World(seed);
+    this.world.generate();
+    this.edits = [];
+    this.resetAvatar();
+    await this.buildAllChunks();
+    if (this.disposed) return;
+    this.spawnEntities();
+    this.invuln = 1.4;
     this.input.enabled = true;
     this.setPhase("playing");
     this.toast("Sammle die sieben Drachenkugeln");
-    if (!useHud.getState().isTouch) {
-      const p = this.canvas.requestPointerLock({ unadjustedMovement: true } as PointerLockOptions);
-      if (p && typeof (p as Promise<void>).catch === "function") {
-        (p as Promise<void>).catch(() => this.canvas.requestPointerLock());
-      }
+  }
+
+  private resetAvatar() {
+    this.power = START_POWER;
+    this.health = MAX_HEALTH;
+    this.flying = false;
+    this.superSaiyan = false;
+    this.selected = 0;
+    this.px = this.world.spawn.x;
+    this.py = this.world.spawn.y;
+    this.pz = this.world.spawn.z;
+    this.yaw = 0;
+    this.pitch = -0.22;
+    this.vx = this.vy = this.vz = 0;
+    this.energy = MAX_ENERGY;
+    this.charge = 0;
+    this.combo = 0;
+    this.comboT = 0;
+    this.dashCd = 0;
+    this.punchCd = 0;
+    this.placeCd = 0;
+    this.kiCd = 0;
+    this.invuln = 0;
+    this.mineT = 0;
+    this.mineKey = "";
+    this.punchT = 0;
+    this.trauma = 0;
+    this.hitstop = 0;
+    this.acc = 0;
+  }
+
+  private requestLock() {
+    if (useHud.getState().isTouch) return;
+    const p = this.canvas.requestPointerLock({ unadjustedMovement: true } as PointerLockOptions);
+    if (p && typeof (p as Promise<void>).catch === "function") {
+      (p as Promise<void>).catch(() => this.canvas.requestPointerLock());
     }
   }
 
@@ -667,19 +727,9 @@ export class GameEngine {
     this.world = new World((Math.random() * 1e9) | 0);
     this.world.generate();
     this.edits = [];
-    this.power = START_POWER;
-    this.health = MAX_HEALTH;
-    this.flying = false;
-    this.superSaiyan = false;
-    this.px = this.world.spawn.x;
-    this.py = this.world.spawn.y;
-    this.pz = this.world.spawn.z;
-    this.yaw = 0;
-    this.pitch = -0.22;
-    this.energy = MAX_ENERGY;
-    this.charge = 0;
-    this.combo = 0;
+    this.resetAvatar();
     await this.buildAllChunks();
+    if (this.disposed) return;
     this.spawnEntities();
     useHud.getState().patch({
       phase: "title",
@@ -760,8 +810,14 @@ export class GameEngine {
       this.health = MAX_HEALTH;
       this.energy = MAX_ENERGY;
       this.power += 1200;
-      for (const b of this.world.balls) b.taken = false;
-      for (const m of this.ballMeshes) m.visible = true;
+      this.world.scatterBalls(() => Math.random());
+      for (let i = 0; i < this.world.balls.length; i++) {
+        const b = this.world.balls[i]!;
+        const m = this.ballMeshes[i];
+        if (!m) continue;
+        m.visible = true;
+        m.position.set(b.x, b.y, b.z);
+      }
       this.toast("Die Kugeln verteilen sich neu");
     }
     this.superSaiyan = this.superSaiyan && this.power >= SSJ_POWER;
@@ -779,6 +835,12 @@ export class GameEngine {
 
   private setPhase(phase: Phase) {
     useHud.getState().patch({ phase });
+  }
+
+  selectSlot(i: number) {
+    if (i < 0 || i >= HOTBAR.length) return;
+    this.selected = i;
+    useHud.getState().patch({ selected: i });
   }
 
   private toast(msg: string) {
@@ -814,10 +876,19 @@ export class GameEngine {
       this.pause();
       return;
     }
+
+    this.yaw -= act.lookX;
+    this.pitch -= act.lookY;
+    const lim = Math.PI / 2 - 0.04;
+    if (this.pitch > lim) this.pitch = lim;
+    if (this.pitch < -lim) this.pitch = -lim;
+
     this.acc += dt;
     const STEP = 1 / 60;
+    let first = true;
     while (this.acc >= STEP) {
-      this.fixed(STEP, act);
+      this.fixed(STEP, act, first);
+      first = false;
       this.acc -= STEP;
     }
     this.animateWorld(dt);
@@ -855,29 +926,23 @@ export class GameEngine {
     return _look;
   }
 
-  private fixed(dt: number, act: ReturnType<Input["poll"]>) {
-    this.yaw -= act.lookX;
-    this.pitch -= act.lookY;
-    const lim = Math.PI / 2 - 0.04;
-    if (this.pitch > lim) this.pitch = lim;
-    if (this.pitch < -lim) this.pitch = -lim;
-
-    if (act.hotbar !== null) this.selected = act.hotbar;
-    if (act.scroll) {
+  private fixed(dt: number, act: ReturnType<Input["poll"]>, edges: boolean) {
+    if (act.hotbar !== null && edges) this.selected = act.hotbar;
+    if (act.scroll && edges) {
       this.selected = (this.selected + act.scroll + HOTBAR.length) % HOTBAR.length;
     }
 
-    if (act.ssjPressed) this.toggleSsj();
-    if (act.dashPressed) this.tryDash();
+    if (edges && act.ssjPressed) this.toggleSsj();
+    if (edges && act.dashPressed) this.tryDash();
 
     const { fx, fz, rx, rz } = this.forwardRight();
     const ssj = this.superSaiyan ? SSJ_MUL : 1;
 
-    if (act.jumpPressed && this.grounded && !this.flying) {
+    if (edges && act.jumpPressed && this.grounded && !this.flying) {
       this.vy = JUMP_VEL * (this.superSaiyan ? 1.2 : 1);
       this.grounded = false;
       this.audio.jump();
-    } else if (act.jumpPressed && !this.grounded && !this.flying) {
+    } else if (edges && act.jumpPressed && !this.grounded && !this.flying) {
       this.flying = true;
       this.toast("Flugmodus");
     }
@@ -889,6 +954,7 @@ export class GameEngine {
       let up = 0;
       if (act.jump) up += 1;
       if (act.sprint || act.flyDown) up -= 1;
+      if (up === 0 && useHud.getState().isTouch) up = -0.34;
       this.vy = up * spd * 0.85;
     } else {
       const spd = (act.sprint ? SPRINT_SPEED : WALK_SPEED) * ssj;
@@ -904,7 +970,7 @@ export class GameEngine {
       }
     }
 
-    this.moveCollide(dt);
+    this.moveCollide(dt, act.jump);
 
     if (this.py < -8) {
       this.hurt(25, "Absturz");
@@ -942,7 +1008,7 @@ export class GameEngine {
         this.audio.charge(this.charge);
       }
     }
-    if (act.kiReleased) {
+    if (edges && act.kiReleased) {
       if (this.charge > 0.02) {
         const shot = this.charge < 0.18 ? 0.45 : this.charge;
         this.fireKi(shot);
@@ -952,7 +1018,7 @@ export class GameEngine {
       this.charge = 0;
     }
 
-    if (act.punchPressed && this.punchCd <= 0) {
+    if (edges && act.punchPressed && this.punchCd <= 0) {
       const e = this.nearestEnemy(2.6);
       if (e && e.alive) this.doPunch();
       else this.mineT = 0;
@@ -962,7 +1028,7 @@ export class GameEngine {
       this.mineT = 0;
       this.mineKey = "";
     }
-    if (act.placePressed && this.placeCd <= 0) this.placeBlock();
+    if (edges && act.placePressed && this.placeCd <= 0) this.placeBlock();
 
     this.updateBlasts(dt);
     this.updateEnemies(dt);
@@ -984,7 +1050,7 @@ export class GameEngine {
     }
   }
 
-  private moveCollide(dt: number) {
+  private moveCollide(dt: number, swimUp: boolean) {
     const speed = Math.hypot(this.vx, this.vy, this.vz);
     const steps = Math.max(1, Math.ceil((speed * dt) / 0.18));
     const sdt = dt / steps;
@@ -992,18 +1058,36 @@ export class GameEngine {
     for (let i = 0; i < steps; i++) {
       this.px += this.vx * sdt;
       if (aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H)) {
-        this.px -= this.vx * sdt;
-        this.vx = 0;
+        const step = 1.05;
+        if (
+          !this.flying &&
+          this.vy <= 0.45 &&
+          !aabbHitsWorld(this.world, this.px, this.py + step, this.pz, PLAYER_HW, PLAYER_H)
+        ) {
+          this.py += step;
+        } else {
+          this.px -= this.vx * sdt;
+          this.vx = 0;
+        }
       }
       this.pz += this.vz * sdt;
       if (aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H)) {
-        this.pz -= this.vz * sdt;
-        this.vz = 0;
+        const step = 1.05;
+        if (
+          !this.flying &&
+          this.vy <= 0.45 &&
+          !aabbHitsWorld(this.world, this.px, this.py + step, this.pz, PLAYER_HW, PLAYER_H)
+        ) {
+          this.py += step;
+        } else {
+          this.pz -= this.vz * sdt;
+          this.vz = 0;
+        }
       }
       this.py += this.vy * sdt;
       if (aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H)) {
         this.py -= this.vy * sdt;
-        if (this.vy < 0) grounded = true;
+        if (this.vy <= 0) grounded = true;
         this.vy = 0;
       }
     }
@@ -1022,6 +1106,7 @@ export class GameEngine {
       this.vx *= 0.84;
       this.vz *= 0.84;
       if (this.vy < -1.5) this.vy *= 0.62;
+      if (swimUp) this.vy = Math.max(this.vy, 5.6);
     }
   }
 
@@ -1770,6 +1855,41 @@ export class GameEngine {
     document.removeEventListener("pointerlockchange", this.onLock);
     document.removeEventListener("visibilitychange", this.vis);
     this.clearChunks();
+    this.clearPool(this.blasts);
+    this.clearPool(this.orbs);
+    this.clearPool(this.debris);
+    for (const e of this.enemies) {
+      this.scene.remove(e.mesh);
+      e.mesh.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          const mat = o.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+    }
+    this.enemies = [];
+    for (const t of this.ballTex) t.dispose();
+    const ballGeos = new Set<THREE.BufferGeometry>();
+    for (const m of this.ballMeshes) {
+      this.scene.remove(m);
+      ballGeos.add(m.geometry);
+      (m.material as THREE.Material).dispose();
+    }
+    for (const g of ballGeos) g.dispose();
+    this.ballMeshes = [];
+    this.hideShenron();
+    const cloudMat = this.clouds[0]?.material;
+    for (const c of this.clouds) {
+      this.scene.remove(c);
+      c.geometry.dispose();
+    }
+    if (cloudMat) {
+      if (Array.isArray(cloudMat)) cloudMat.forEach((m) => m.dispose());
+      else cloudMat.dispose();
+    }
+    this.clouds = [];
     this.atlas.dispose();
     this.terrainMat.dispose();
     this.highlight.geometry.dispose();

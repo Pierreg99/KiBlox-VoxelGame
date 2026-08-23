@@ -1,6 +1,18 @@
 {
-  "name": "app-builder-workspace",
+  "name": "kiblox",
+  "version": "0.2.0",
   "private": true,
+  "license": "MIT",
+  "description": "KI BLOX — Voxel-Welt zum Bauen, Fliegen und Ki-Kampf",
+  "author": "Pierreg99 / Cryopg.it",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pierreg99/kiblox.git"
+  },
+  "homepage": "https://github.com/Pierreg99/kiblox",
+  "bugs": {
+    "url": "https://github.com/Pierreg99/kiblox/issues"
+  },
   "sideEffects": false,
   "type": "module",
   "overrides": {
@@ -14,7 +26,7 @@
     "preview": "node scripts/with-app-env.mjs vite preview",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --test 'scripts/**/*.test.mjs'",
+    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/auth/gate-identity.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -53,6 +65,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.0.0",
+    "jose": "6.2.9",
     "kysely": "^0.28.5",
     "lucide-react": "^0.510.0",
     "pg": "^8.16.3",
