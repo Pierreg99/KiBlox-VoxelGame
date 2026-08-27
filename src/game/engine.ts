@@ -43,6 +43,13 @@ import {
   SSJ_MUL,
   SSJ_POWER,
   START_POWER,
+  CAMP_START_POWER,
+  CAMP_IFRAMES,
+  CAMP_ENERGY_REGEN,
+  CAMP_SSJ_DRAIN,
+  CAMP_WISH_POWER,
+  CAMP_KILL_KI,
+  CAMP_BALL_KI,
   STEP_HEIGHT,
   SX,
   SY,
@@ -58,11 +65,13 @@ import {
   SPECIES,
   kindLabel,
   nextPlanet,
+  planetIndex,
   type PlanetId,
   type Stage,
   type StoryLine,
 } from "./campaign";
 import {
+  campaignInv,
   chainFor,
   completeReady,
   countTypes,
@@ -102,6 +111,8 @@ type Enemy = {
   species: import("./campaign").SpeciesId;
   name?: string;
   boss?: boolean;
+  aggro: boolean;
+  enraged: boolean;
 };
 
 type Blast = {
@@ -723,9 +734,10 @@ export class GameEngine {
     this.enemies = [];
     if (this.mode !== "creative") {
       for (const s of this.world.enemies) {
-        const e = this.makeEnemy(s.x, s.y, s.z, s.power, s.kind, s.species);
+        const e = this.makeEnemy(s.x, s.y, s.z, s.power, s.kind, s.species, !!s.boss);
         e.name = s.name;
         e.boss = s.boss;
+        e.aggro = !!s.boss;
         this.enemies.push(e);
       }
     }
@@ -773,7 +785,7 @@ export class GameEngine {
 
     const blastGeo = new THREE.SphereGeometry(0.16, 10, 8);
     this.blasts = [];
-    for (let i = 0; i < 28; i++) {
+    for (let i = 0; i < 40; i++) {
       const mesh = new THREE.Mesh(
         blastGeo,
         new THREE.MeshBasicMaterial({
@@ -848,11 +860,31 @@ export class GameEngine {
     list.length = 0;
   }
 
-  private makeEnemy(x: number, y: number, z: number, power: number, kind: EnemyKind = "grunt", species: import("./campaign").SpeciesId = "cryon"): Enemy {
+  private story() {
+    return this.mode === "story";
+  }
+
+  private rank() {
+    return Math.max(0, planetIndex(this.planet));
+  }
+
+  private makeEnemy(
+    x: number,
+    y: number,
+    z: number,
+    power: number,
+    kind: EnemyKind = "grunt",
+    species: import("./campaign").SpeciesId = "cryon",
+    boss = false,
+  ): Enemy {
     const g = makeBeing(kind, species);
     g.position.set(x, y, z);
     this.scene.add(g);
-    const hp = hpFor(kind, power);
+    let hp = hpFor(kind, power, this.story());
+    if (this.story()) {
+      const r = this.rank();
+      hp *= boss || kind === "lord" ? 2.9 + r * 0.5 : 1.65 + r * 0.22;
+    }
     return {
       mesh: g,
       x,
@@ -870,6 +902,9 @@ export class GameEngine {
       hop: Math.random() * 1.4,
       kind,
       species,
+      boss,
+      aggro: !!boss,
+      enraged: false,
     };
   }
 
@@ -893,7 +928,7 @@ export class GameEngine {
       this.stage = "intro";
       this.unlocked = ["verdant"];
       this.bossDown = [];
-      this.inv = starterInv();
+      this.inv = campaignInv();
       this.hotbarIds = [...HOTBAR];
       this.questDone = [];
       this.stats = emptyStats();
@@ -903,6 +938,7 @@ export class GameEngine {
         this.resetAvatar();
         for (const b of this.world.balls) b.taken = false;
         for (const m of this.ballMeshes) m.visible = true;
+        this.spawnEntities();
         this.invuln = 1.4;
         this.openRules(true);
         return;
@@ -967,7 +1003,7 @@ export class GameEngine {
   }
 
   private resetAvatar() {
-    this.power = START_POWER;
+    this.power = this.story() ? CAMP_START_POWER : START_POWER;
     this.health = MAX_HEALTH;
     this.flying = false;
     this.superSaiyan = false;
@@ -1138,8 +1174,8 @@ export class GameEngine {
   }
 
   respawn() {
-    this.health = MAX_HEALTH;
-    this.energy = Math.max(this.energy, 55);
+    this.health = this.story() ? Math.round(MAX_HEALTH * 0.7) : MAX_HEALTH;
+    this.energy = Math.max(this.energy, this.story() ? 40 : 55);
     this.px = this.world.spawn.x;
     this.py = this.world.spawn.y;
     this.pz = this.world.spawn.z;
@@ -1156,9 +1192,9 @@ export class GameEngine {
   grantWish(kind: "power" | "heal" | "storm" | "warp") {
     this.audio.wish();
     if (kind === "power") {
-      this.power += 4000;
+      this.power += this.story() ? CAMP_WISH_POWER : 4000;
       this.energy = MAX_ENERGY;
-      this.toast("Dein Ki explodiert");
+      this.toast(this.story() ? "Ein Funken mehr Ki" : "Dein Ki explodiert");
     } else if (kind === "heal") {
       this.health = MAX_HEALTH;
       this.energy = MAX_ENERGY;
@@ -1166,7 +1202,7 @@ export class GameEngine {
     } else if (kind === "storm") {
       this.health = MAX_HEALTH;
       this.energy = MAX_ENERGY;
-      this.power += 1200;
+      this.power += this.story() ? 280 : 1200;
       this.world.scatterBalls(() => Math.random());
       for (let i = 0; i < this.world.balls.length; i++) {
         const b = this.world.balls[i]!;
@@ -1611,6 +1647,10 @@ export class GameEngine {
       this.landDip = 0.22;
       this.burst(this.px, this.py + 0.1, this.pz, 5);
       rumble(90, 0.35);
+      if (this.story() && falling < -13) {
+        const extra = Math.min(52, (-falling - 13) * 3.6);
+        if (extra > 7) this.hurt(extra, "Sturz");
+      }
     } else if (this.grounded && falling < -6) {
       this.landDip = Math.max(this.landDip, 0.1);
     }
@@ -1639,10 +1679,12 @@ export class GameEngine {
     this.comboT = Math.max(0, this.comboT - dt);
     if (this.comboT <= 0) this.combo = 0;
 
-    const regen = (this.superSaiyan ? 18 : 16) * dt;
+    const regen = this.story()
+      ? (this.superSaiyan ? CAMP_ENERGY_REGEN + 1.6 : CAMP_ENERGY_REGEN) * dt
+      : (this.superSaiyan ? 18 : 16) * dt;
     this.energy = Math.min(MAX_ENERGY, this.energy + regen);
     if (this.superSaiyan) {
-      this.energy -= 14 * dt;
+      this.energy -= (this.story() ? CAMP_SSJ_DRAIN : 14) * dt;
       if (this.energy <= 0) {
         this.energy = 0;
         this.superSaiyan = false;
@@ -1822,7 +1864,7 @@ export class GameEngine {
       }
     }
     if (this.world.get(wx, Math.floor(this.py + 0.2), wz) === LAVA && this.invuln <= 0) {
-      this.hurt(18 * dt, "Lava");
+      this.hurt((this.story() ? 34 : 18) * dt, "Lava");
     }
   }
 
@@ -1837,14 +1879,17 @@ export class GameEngine {
   }
 
   private doPunch() {
-    this.punchCd = 0.28;
+    this.punchCd = this.story() ? 0.38 : 0.28;
     this.punchT = 0.22;
     this.audio.punch();
     rumble(70, 0.45);
-    const e = this.nearestEnemy(2.6);
+    const e = this.nearestEnemy(this.story() ? 2.05 : 2.6);
     if (e && e.alive) {
-      const dmg = (18 + this.power / 400) * (this.superSaiyan ? 1.8 : 1) * (1 + this.combo * 0.08);
-      this.damageEnemy(e, dmg, 5.5);
+      const dmg =
+        (this.story() ? 12 + this.power / 560 : 18 + this.power / 400) *
+        (this.superSaiyan ? 1.55 : 1) *
+        (1 + this.combo * (this.story() ? 0.045 : 0.08));
+      this.damageEnemy(e, dmg, this.story() ? 3.6 : 5.5);
       this.trauma = Math.min(1, this.trauma + 0.22);
       this.hitstop = 0.045;
     }
@@ -1857,8 +1902,8 @@ export class GameEngine {
       return;
     }
     this.energy -= 16;
-    this.dashCd = 0.82;
-    this.invuln = Math.max(this.invuln, 0.24);
+    this.dashCd = this.story() ? 1.05 : 0.82;
+    this.invuln = Math.max(this.invuln, this.story() ? 0.1 : 0.24);
     const d = this.lookDir();
     const spd = 26 * (this.superSaiyan ? 1.35 : 1);
     this.vx = d.x * spd;
@@ -1948,7 +1993,7 @@ export class GameEngine {
     rumble(50, 0.28);
     this.burst(x + 0.5, y + 0.5, z + 0.5, 8);
     if (block === KI) {
-      this.power += 55;
+      this.power += this.story() ? 12 : 55;
       this.toast("Ki-Kristall absorbiert");
     }
     if (block > 0 && block !== WATER && block !== LAVA && block !== BEDROCK) {
@@ -1962,13 +2007,13 @@ export class GameEngine {
 
   private fireKi(charge: number) {
     if (this.kiCd > 0) return;
-    const cost = 10 + charge * 22;
+    const cost = this.story() ? 14 + charge * 28 : 10 + charge * 22;
     if (this.energy < cost * 0.45) {
       this.toast("Ki erschöpft");
       return;
     }
     this.energy = Math.max(0, this.energy - cost);
-    this.kiCd = this.superSaiyan ? 0.12 : 0.2;
+    this.kiCd = this.superSaiyan ? (this.story() ? 0.18 : 0.12) : this.story() ? 0.28 : 0.2;
     const heavy = charge > 0.72;
     if (heavy) this.audio.beam();
     else this.audio.ki();
@@ -1980,7 +2025,7 @@ export class GameEngine {
     b.active = true;
     b.hostile = false;
     b.life = 1.35 + charge * 0.55;
-    b.dmg = (22 + this.power / 260) * (0.55 + charge) * (this.superSaiyan ? 1.9 : 1);
+    b.dmg = (this.story() ? 16 + this.power / 340 : 22 + this.power / 260) * (0.55 + charge) * (this.superSaiyan ? 1.65 : 1);
     b.radius = 0.14 + charge * 0.26;
     const spd = (36 + charge * 22) * (this.superSaiyan ? 1.28 : 1);
     b.x = e.x + d.x * 0.7;
@@ -1997,28 +2042,37 @@ export class GameEngine {
     this.trauma = Math.min(1, this.trauma + 0.1 + charge * 0.12);
   }
 
-  private enemyKi(e: Enemy) {
+  private enemyKi(e: Enemy, spread = 0) {
     const b = this.blasts.find((x) => !x.active);
     if (!b) return;
-    const tx = this.px - e.x;
-    const ty = this.py + EYE - (e.y + 1.15);
-    const tz = this.pz - e.z;
+    const lead = this.story() ? 0.24 + this.rank() * 0.03 : 0;
+    const tx = this.px + this.vx * lead - e.x;
+    const ty = this.py + EYE - (e.y + 1.15) + this.vy * lead * 0.35;
+    const tz = this.pz + this.vz * lead - e.z;
     const len = Math.hypot(tx, ty, tz) || 1;
-    const spd = 17;
+    const yaw = spread;
+    const hx = tx / len;
+    const hz = tz / len;
+    const cs = Math.cos(yaw);
+    const sn = Math.sin(yaw);
+    const dx = hx * cs - hz * sn;
+    const dz = hx * sn + hz * cs;
+    const hy = ty / len;
+    const spd = this.story() ? 23 + this.rank() * 1.8 : 17;
     b.active = true;
     b.hostile = true;
-    b.dmg = 9 + e.power / 340;
-    b.radius = 0.18;
+    b.dmg = (this.story() ? 16 : 9) + e.power / (this.story() ? 240 : 340);
+    b.radius = this.story() ? 0.22 : 0.18;
     b.life = 2.1;
-    b.x = e.x + (tx / len) * 0.55;
+    b.x = e.x + dx * 0.55;
     b.y = e.y + 1.15;
-    b.z = e.z + (tz / len) * 0.55;
-    b.vx = (tx / len) * spd;
-    b.vy = (ty / len) * spd;
-    b.vz = (tz / len) * spd;
+    b.z = e.z + dz * 0.55;
+    b.vx = dx * spd;
+    b.vy = hy * spd;
+    b.vz = dz * spd;
     const mat = b.mesh.material as THREE.MeshBasicMaterial;
-    mat.color.setHex(0xff7048);
-    b.mesh.scale.setScalar(1.2);
+    mat.color.setHex(e.boss ? 0xff4060 : 0xff7048);
+    b.mesh.scale.setScalar(e.boss ? 1.45 : 1.2);
     b.mesh.visible = true;
     b.mesh.position.set(b.x, b.y, b.z);
   }
@@ -2119,14 +2173,23 @@ export class GameEngine {
     const len = Math.hypot(dx, dz) || 1;
     e.vx += (dx / len) * knock;
     e.vz += (dz / len) * knock;
-    e.vy += 3;
+    e.vy += this.story() ? 1.6 : 3;
+    e.aggro = true;
+    if (this.story()) {
+      for (const o of this.enemies) {
+        if (!o.alive || o === e) continue;
+        const odx = o.x - e.x;
+        const odz = o.z - e.z;
+        if (odx * odx + odz * odz < 16 * 16) o.aggro = true;
+      }
+    }
     this.burst(e.x, e.y + 0.9, e.z, 10);
     this.combo += 1;
     this.comboT = 1.7;
     if (e.hp <= 0) {
       e.alive = false;
       e.mesh.visible = false;
-      const gain = 180 + ((e.power / 8) | 0);
+      const gain = this.story() ? CAMP_KILL_KI + ((e.power / 70) | 0) : 180 + ((e.power / 8) | 0);
       this.power += gain;
       this.toast(`+${gain} Ki`);
       this.trauma = Math.min(1, this.trauma + 0.35);
@@ -2136,6 +2199,7 @@ export class GameEngine {
       this.stats.kills += 1;
       this.noteQuest();
       if (e.boss && this.campaign) {
+        this.health = Math.min(MAX_HEALTH, this.health + 18);
         if (!this.bossDown.includes(this.planet)) this.bossDown.push(this.planet);
         this.stats.bossDown = true;
         this.toast(`${e.name ?? "Fürst"} fällt`);
@@ -2150,6 +2214,9 @@ export class GameEngine {
   }
 
   private updateEnemies(dt: number) {
+    const hard = this.story();
+    const rank = this.rank();
+    const playing = useHud.getState().phase === "playing";
     for (const e of this.enemies) {
       if (!e.alive) continue;
       e.cooldown = Math.max(0, e.cooldown - dt);
@@ -2163,40 +2230,66 @@ export class GameEngine {
         const rest = SPECIES[e.species]?.body ?? 0x4a9a3a;
         body.material.color.setHex(e.flash > 0 ? 0xf4f1e6 : rest);
       }
-      if (e.kind === "flyer" || e.kind === "lord") {
-        const targetY = this.py + 4.2;
-        e.vy = (targetY - e.y) * 1.6;
-        const spd = 5.4;
-        if (dist > 1.6) {
+
+      const see = e.boss ? 54 : hard ? 18 + rank * 2 : 48;
+      if (dist < see) e.aggro = true;
+      if (hard && !e.boss && e.aggro && dist > 40) e.aggro = false;
+
+      if (e.boss && !e.enraged && e.hp < e.maxHp * 0.45) {
+        e.enraged = true;
+        e.cooldown = 0.2;
+        this.toast(`${e.name ?? "Wächter"} tobt`);
+        this.spawnAdds(e);
+      }
+
+      const hunting = e.aggro || !hard;
+      if (!hunting) {
+        e.vx *= 0.86;
+        e.vz *= 0.86;
+        if (e.kind === "flyer" || e.kind === "lord") e.vy *= 0.9;
+        else e.vy -= GRAVITY * dt;
+        this.moveEntity(e, dt, e.kind === "flyer" || e.kind === "lord");
+      } else if (e.kind === "flyer" || e.kind === "lord") {
+        const dive = hard && dist < 7.5;
+        const targetY = this.py + (dive ? 1.15 : 4.2);
+        e.vy = (targetY - e.y) * (dive ? 2.4 : 1.6);
+        const spd = hard ? (e.enraged ? 8.4 : 6.6) : 5.4;
+        if (dist > 1.4) {
           e.vx += ((dx / dist) * spd - e.vx) * 3 * dt;
           e.vz += ((dz / dist) * spd - e.vz) * 3 * dt;
         } else {
           e.vx *= 0.9;
           e.vz *= 0.9;
         }
-        if (dist < 2.1 && e.cooldown <= 0 && useHud.getState().phase === "playing") {
-          e.cooldown = e.kind === "lord" ? 0.7 : 1.15;
-          this.hurt(13 + e.power / 380, e.name ?? kindLabel(e.kind, e.species));
+        if (playing && dist < (hard ? 2.4 : 2.1) && e.cooldown <= 0) {
+          e.cooldown = e.kind === "lord" ? (e.enraged ? 0.42 : 0.62) : hard ? 0.72 : 1.15;
+          this.hurt((hard ? 20 : 13) + e.power / (hard ? 300 : 380), e.name ?? kindLabel(e.kind, e.species));
+          this.vx -= (dx / (dist || 1)) * (hard ? 8 : 4);
+          this.vz -= (dz / (dist || 1)) * (hard ? 8 : 4);
         }
-        if (e.kind === "lord" && dist < 26 && e.cooldown <= 0 && useHud.getState().phase === "playing") {
-          e.cooldown = 1.1;
+        if (playing && (e.kind === "lord" || (hard && e.kind === "flyer" && dist < 20)) && dist < 28 && e.cooldown <= 0) {
+          e.cooldown = e.enraged ? 0.55 : hard ? 0.85 : 1.1;
           this.enemyKi(e);
+          if (hard && (e.boss || e.enraged)) {
+            this.enemyKi(e, 0.22);
+            this.enemyKi(e, -0.22);
+          }
         }
         this.moveEntity(e, dt, true);
-      } else if (e.kind === "shooter" || e.kind === "elite") {
-        const ideal = 11;
+      } else if (e.kind === "shooter" || e.kind === "elite" || e.boss) {
+        const ideal = hard ? 9.5 : 11;
         if (dist < 46 && dist > 0.4) {
           const push = dist < ideal ? -1 : 1;
-          const spd = 3.4;
+          const spd = hard ? (e.enraged ? 5.2 : 4.2) : 3.4;
           const px = -dz / dist;
           const pz = dx / dist;
-          const wx = (dx / dist) * push * spd + px * Math.sin(this.orbitT * 1.6) * 2.4;
-          const wz = (dz / dist) * push * spd + pz * Math.sin(this.orbitT * 1.6) * 2.4;
+          const wx = (dx / dist) * push * spd + px * Math.sin(this.orbitT * 1.6) * (hard ? 3.2 : 2.4);
+          const wz = (dz / dist) * push * spd + pz * Math.sin(this.orbitT * 1.6) * (hard ? 3.2 : 2.4);
           e.vx += (wx - e.vx) * (1 - Math.exp(-5 * dt));
           e.vz += (wz - e.vz) * (1 - Math.exp(-5 * dt));
           if (e.hop <= 0 && this.onGround(e.x, e.y, e.z)) {
-            e.vy = 4.4;
-            e.hop = 0.9 + Math.random() * 0.5;
+            e.vy = hard ? 5.2 : 4.4;
+            e.hop = hard ? 0.55 + Math.random() * 0.35 : 0.9 + Math.random() * 0.5;
           }
         } else {
           e.vx *= 0.9;
@@ -2204,18 +2297,27 @@ export class GameEngine {
         }
         e.vy -= GRAVITY * dt;
         this.moveEntity(e, dt, false);
-        if (dist < 22 && dist > 3.2 && e.cooldown <= 0 && useHud.getState().phase === "playing") {
-          e.cooldown = 1.55;
+        if (playing && dist < (hard ? 26 : 22) && dist > 2.4 && e.cooldown <= 0) {
+          e.cooldown = e.enraged ? 0.7 : hard ? (e.kind === "elite" || e.boss ? 0.95 : 1.15) : 1.55;
           this.enemyKi(e);
+          if (hard && (e.boss || e.kind === "elite")) {
+            this.enemyKi(e, 0.18);
+            if (e.enraged) this.enemyKi(e, -0.18);
+          }
+        }
+        if (playing && hard && dist < 1.7 && e.cooldown <= 0.2) {
+          e.cooldown = 0.7;
+          this.hurt(18 + e.power / 280, e.name ?? kindLabel(e.kind, e.species));
         }
       } else {
-        if (dist < 48 && dist > 1.3) {
-          const spd = e.kind === "brute" ? 5.6 : 3.8;
+        const charging = hard && e.kind === "brute" && dist > 3 && dist < 13;
+        const spd = charging ? 9.8 : e.kind === "brute" ? (hard ? 6.8 : 5.6) : hard ? 4.8 : 3.8;
+        if (dist < (hard ? 22 : 48) && dist > 1.15) {
           e.vx += ((dx / dist) * spd - e.vx) * (1 - Math.exp(-6 * dt));
           e.vz += ((dz / dist) * spd - e.vz) * (1 - Math.exp(-6 * dt));
           if (e.hop <= 0 && this.onGround(e.x, e.y, e.z)) {
-            e.vy = 5.2;
-            e.hop = 0.7 + Math.random() * 0.6;
+            e.vy = charging ? 2.2 : 5.2;
+            e.hop = hard ? 0.45 + Math.random() * 0.4 : 0.7 + Math.random() * 0.6;
           }
         } else {
           e.vx *= 0.9;
@@ -2223,10 +2325,13 @@ export class GameEngine {
         }
         e.vy -= GRAVITY * dt;
         this.moveEntity(e, dt, false);
-        if (dist < 1.55 && e.cooldown <= 0 && useHud.getState().phase === "playing") {
-          e.cooldown = 1.05;
-          this.hurt(11 + e.power / 400, e.name ?? kindLabel(e.kind, e.species));
-          const k = 6;
+        if (playing && dist < (hard ? 1.7 : 1.55) && e.cooldown <= 0) {
+          e.cooldown = hard ? (e.kind === "brute" ? 0.58 : 0.7) : 1.05;
+          this.hurt(
+            (hard ? 18 : 11) + e.power / (hard ? 280 : 400) + (e.kind === "brute" ? 8 : 0),
+            e.name ?? kindLabel(e.kind, e.species),
+          );
+          const k = hard ? 9 : 6;
           this.vx -= (dx / (dist || 1)) * k;
           this.vz -= (dz / (dist || 1)) * k;
         }
@@ -2245,6 +2350,25 @@ export class GameEngine {
         attacking: e.cooldown > 0.4,
         grounded: !air,
       });
+    }
+  }
+
+  private spawnAdds(around: Enemy) {
+    if (!this.story()) return;
+    let n = 0;
+    for (const s of [
+      [3.2, 1.4],
+      [-3.1, -1.8],
+    ] as [number, number][]) {
+      if (n >= 2) break;
+      const x = around.x + s[0];
+      const z = around.z + s[1];
+      if (x < 4 || z < 4 || x > SX - 4 || z > SZ - 4) continue;
+      const kind: EnemyKind = around.kind === "lord" ? "elite" : "shooter";
+      const add = this.makeEnemy(x, around.y + 0.4, z, around.power * 0.35, kind, around.species, false);
+      add.aggro = true;
+      this.enemies.push(add);
+      n++;
     }
   }
 
@@ -2295,9 +2419,15 @@ export class GameEngine {
   private hurt(n: number, src: string) {
     if (this.mode === "creative") return;
     if (this.invuln > 0) return;
-    const taken = n * (this.superSaiyan ? 0.65 : 1);
+    const resist = this.superSaiyan ? (this.story() ? 0.82 : 0.65) : 1;
+    const taken = n * resist;
     this.health -= taken;
-    this.invuln = 0.55;
+    this.invuln = this.story() ? CAMP_IFRAMES : 0.55;
+    if (this.story()) {
+      this.vx *= 0.42;
+      this.vz *= 0.42;
+      if (this.flying && taken > 18) this.vy -= 2.4;
+    }
     this.audio.hurt();
     this.trauma = Math.min(1, this.trauma + 0.45);
     this.toast(`${src} trifft dich`);
@@ -2324,7 +2454,7 @@ export class GameEngine {
         b.taken = true;
         const m = this.ballMeshes[i];
         if (m) m.visible = false;
-        this.power += 420 + b.stars * 80;
+        this.power += this.story() ? CAMP_BALL_KI + b.stars * 10 : 420 + b.stars * 80;
         this.audio.collect();
         this.toast(`${b.stars}-Sterne-Kugel`);
         const got = this.world.balls.filter((x) => x.taken).length;
@@ -2677,6 +2807,17 @@ export class GameEngine {
       getPos: () => ({ x: this.px, y: this.py, z: this.pz }),
       getPhase: () => useHud.getState().phase,
       getMode: () => this.mode,
+      getCombat: () => ({
+        mode: this.mode,
+        power: this.power,
+        health: this.health,
+        energy: this.energy,
+        enemyCount: this.enemies.filter((e) => e.alive).length,
+        bossHp: this.enemies.find((e) => e.boss)?.hp ?? 0,
+        bossMax: this.enemies.find((e) => e.boss)?.maxHp ?? 0,
+        gruntHp: this.enemies.find((e) => e.kind === "grunt" && !e.boss)?.maxHp ?? 0,
+        startPower: this.story() ? CAMP_START_POWER : START_POWER,
+      }),
       getInv: () => this.inv.slice(),
       getQuest: () => this.questView(),
       openPanel: (p: "inventory" | "quests" | "rules") => this.openPanel(p),
@@ -2864,6 +3005,17 @@ declare global {
       placeNow?: () => [number, number, number, number] | null;
       takeAllBalls?: () => string;
       getMode?: () => string;
+      getCombat?: () => {
+        mode: string;
+        power: number;
+        health: number;
+        energy: number;
+        enemyCount: number;
+        bossHp: number;
+        bossMax: number;
+        gruntHp: number;
+        startPower: number;
+      };
       getInv?: () => number[];
       getQuest?: () => { title: string; value: number; target: number };
       openPanel?: (p: "inventory" | "quests" | "rules") => void;

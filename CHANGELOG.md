@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.5 — 2026-08-27
+
+- Kampagne is a real fight: guarded orbs, packs at the temple, short i-frames, fall/lava kill
+- Ki is earned slowly (kills, crystals, stars). Super Saiyan is mid-saga, not planet one
+- Enemies aggro in packs, lead shots, brutes charge, bosses enrage and call adds
+- Wish on power is a spark, not a dump. Freies Spiel stays the softer hunt
+
 ## 0.6.4 — 2026-08-27
 
 - Camera: dedicated FPS yaw/pitch rig (camera is a child, local rotation always identity). Title shot is locked — no orbit, no lookAt, player yaw is not overwritten

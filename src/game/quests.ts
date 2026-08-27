@@ -51,13 +51,14 @@ export const MODE_META: Record<GameMode, { name: string; tag: string; blurb: str
   story: {
     name: "Kampagne",
     tag: "Orbit-Saga",
-    blurb: "Fünf Welten. Sieben Kugeln. Ein Wunsch, der Tore öffnet.",
+    blurb: "Fünf Welten. Bewachte Kugeln. Ein Wunsch, der Tore öffnet — wenn du überlebst.",
     rules: [
-      "Rede mit dem Ältesten (E), solange du nah genug stehst.",
-      "Sammle sieben Sternenkugeln. Das Radar zeigt die Richtung.",
-      "Besiege den Wächter der Welt, dann wünsche bei Orryx.",
+      "Kampagne ist hart. Späher bewachen die Kugeln. Treffer zählen.",
+      "Rede mit dem Ältesten (E). Dann Radar, sieben Sterne, Wächter, Wunsch.",
+      "Ki verdient man sich. Super Saiyan erst spät (4500). Wunsch auf Kraft gibt wenig.",
+      "Sturz und Lava töten. I-Frames sind kurz. Ausweichen, laden, treffen.",
       "Abbauen füllt das Inventar. Setzen verbraucht Blöcke.",
-      "W vor, A links, D rechts, S zurück. Shift schleichen. Strg sprinten. Z zoomen. Leertaste hoch im Flug.",
+      "W vor, A links, D rechts, S zurück. Shift schleichen. Strg sprinten. Z zoomen.",
       "I Inventar · J Aufgaben · H Regeln · ESC Pause.",
     ],
   },
@@ -117,6 +118,16 @@ export function starterInv(): number[] {
   a[4] = 8; // sand
   a[5] = 10; // wood
   a[7] = 3; // ki
+  return a;
+}
+
+export function campaignInv(): number[] {
+  const a = emptyInv();
+  a[1] = 8;
+  a[2] = 6;
+  a[3] = 4;
+  a[5] = 4;
+  a[7] = 1;
   return a;
 }
 

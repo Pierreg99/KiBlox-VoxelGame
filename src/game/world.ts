@@ -30,7 +30,7 @@ import {
   WATER,
   WOOD,
 } from "./constants";
-import { PLANETS, pickKind, speciesFor, type PlanetId, type SpeciesId } from "./campaign";
+import { PLANETS, pickKind, planetIndex, speciesFor, type PlanetId, type SpeciesId } from "./campaign";
 import { makeRng } from "./rng";
 
 export type DragonBall = {
@@ -650,23 +650,55 @@ export class World {
     }
 
     this.enemies = [];
-    for (let i = 0; i < 24; i++) {
+    const rank = planetIndex(this.planet);
+    const patrol = 20 + rank * 6;
+    const pushE = (
+      x: number,
+      z: number,
+      kind: EnemyKind,
+      power: number,
+      extra?: { name?: string; boss?: boolean; fly?: boolean },
+    ) => {
+      const y = (this.surfaceY(Math.floor(x), Math.floor(z)) || SEA_LEVEL) + 0.05;
+      this.enemies.push({
+        x: x + (extra?.boss ? 0 : 0.5),
+        y: extra?.fly || kind === "flyer" || kind === "lord" ? y + 4 + rngE() * 5 : y,
+        z: z + (extra?.boss ? 0 : 0.5),
+        power,
+        kind,
+        species: extra?.boss ? P.boss.species : speciesFor(kind, this.planet),
+        name: extra?.name,
+        boss: extra?.boss,
+      });
+    };
+    for (let i = 0; i < patrol; i++) {
       const x = 8 + ((rngE() * (SX - 16)) | 0);
       const z = 8 + ((rngE() * (SZ - 16)) | 0);
-      const y = height[x + z * SX]! + 1;
       const dx = x - this.spawn.x;
       const dz = z - this.spawn.z;
-      if (dx * dx + dz * dz < 16 * 16) continue;
+      if (dx * dx + dz * dz < 12 * 12) continue;
       const kind = pickKind(P.enemyMix, rngE);
-      const species = speciesFor(kind, this.planet);
-      this.enemies.push({
-        x: x + 0.5,
-        y: kind === "flyer" ? y + 4 + rngE() * 6 : y,
-        z: z + 0.5,
-        power: 700 + ((rngE() * 1800) | 0) + (kind === "flyer" ? 400 : kind === "brute" ? 600 : 0),
-        kind,
-        species,
-      });
+      const power =
+        1100 +
+        rank * 900 +
+        ((rngE() * (1600 + rank * 500)) | 0) +
+        (kind === "flyer" ? 500 : kind === "brute" ? 800 : kind === "elite" ? 1200 : 0);
+      pushE(x, z, kind, power, { fly: kind === "flyer" });
+    }
+    for (const b of this.balls) {
+      for (let g = 0; g < 2; g++) {
+        const ang = rngE() * Math.PI * 2;
+        const rad = 3.2 + rngE() * 3.4;
+        const gx = Math.max(4, Math.min(SX - 5, b.x + Math.cos(ang) * rad));
+        const gz = Math.max(4, Math.min(SZ - 5, b.z + Math.sin(ang) * rad));
+        const kind = pickKind(P.enemyMix, rngE);
+        const power = 1400 + rank * 1100 + ((rngE() * 900) | 0);
+        pushE(gx, gz, kind, power);
+      }
+    }
+    for (let t = 0; t < 3; t++) {
+      const ang = (t / 3) * Math.PI * 2;
+      pushE(tx + Math.cos(ang) * 5.5, tz + Math.sin(ang) * 5.5, t === 0 ? "brute" : pickKind(P.enemyMix, rngE), 1800 + rank * 1200);
     }
     const by = this.surfaceY(tx, tz);
     this.enemies.push({

@@ -2,7 +2,7 @@
 
 Letzte Aktualisierung: 2026-08-27.
 
-Das Spiel ist **spielbar**. v0.6.4: feste FPS-Kamera (Yaw-Pitch-Rig), Minecraft-Menüs, GitHub.
+Das Spiel ist **spielbar**. v0.6.5: Kampagne hart (bewachte Kugeln, kurze I-Frames, Wächter mit Adds).
 
 ## Status
 

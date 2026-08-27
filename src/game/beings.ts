@@ -574,8 +574,8 @@ export function poseViewArms(
   fists.left.scale.setScalar(1.15 + charge * 0.2);
 }
 
-export function hpFor(kind: EnemyKind, power: number) {
+export function hpFor(kind: EnemyKind, power: number, story = false) {
   const base =
-    kind === "lord" ? 160 : kind === "elite" ? 90 : kind === "brute" ? 70 : kind === "flyer" ? 28 : kind === "shooter" ? 44 : 36;
-  return base + power / 80;
+    kind === "lord" ? 240 : kind === "elite" ? 130 : kind === "brute" ? 100 : kind === "flyer" ? 38 : kind === "shooter" ? 62 : 52;
+  return base + power / (story ? 48 : 80);
 }
