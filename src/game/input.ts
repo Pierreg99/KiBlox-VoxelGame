@@ -6,7 +6,9 @@ export type Actions = {
   jump: boolean;
   jumpPressed: boolean;
   flyDown: boolean;
+  crouch: boolean;
   sprint: boolean;
+  zoom: boolean;
   punch: boolean;
   punchPressed: boolean;
   place: boolean;
@@ -18,6 +20,9 @@ export type Actions = {
   dashPressed: boolean;
   pausePressed: boolean;
   interactPressed: boolean;
+  invPressed: boolean;
+  questPressed: boolean;
+  rulesPressed: boolean;
   hotbar: number | null;
   scroll: number;
 };
@@ -30,7 +35,9 @@ const EMPTY: Actions = {
   jump: false,
   jumpPressed: false,
   flyDown: false,
+  crouch: false,
   sprint: false,
+  zoom: false,
   punch: false,
   punchPressed: false,
   place: false,
@@ -42,6 +49,9 @@ const EMPTY: Actions = {
   dashPressed: false,
   pausePressed: false,
   interactPressed: false,
+  invPressed: false,
+  questPressed: false,
+  rulesPressed: false,
   hotbar: null,
   scroll: 0,
 };
@@ -51,6 +61,47 @@ function radial(x: number, y: number, dz = 0.15) {
   if (m < dz) return { x: 0, y: 0 };
   const scale = ((m - dz) / (1 - dz)) / m;
   return { x: x * scale, y: y * scale };
+}
+
+const GAME_CODES = new Set([
+  "Space",
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "KeyW",
+  "KeyA",
+  "KeyS",
+  "KeyD",
+  "KeyQ",
+  "KeyF",
+  "KeyR",
+  "KeyE",
+  "KeyI",
+  "KeyJ",
+  "KeyH",
+  "KeyZ",
+  "KeyC",
+  "KeyX",
+  "Tab",
+  "ControlLeft",
+  "ControlRight",
+  "ShiftLeft",
+  "ShiftRight",
+]);
+
+export function rumble(ms: number, strong = 0.42) {
+  try {
+    const gp = navigator.getGamepads?.()[0];
+    void gp?.vibrationActuator?.playEffect("dual-rumble", {
+      startDelay: 0,
+      duration: ms,
+      strongMagnitude: strong,
+      weakMagnitude: strong * 0.55,
+    });
+  } catch {
+    /* no pad */
+  }
 }
 
 export class Input {
@@ -73,6 +124,8 @@ export class Input {
   touchPlace = false;
   touchKi = false;
   touchSsj = false;
+  touchCrouch = false;
+  touchSprint = false;
   private punchEdge = false;
   private placeEdge = false;
   private kiEdge = false;
@@ -81,9 +134,16 @@ export class Input {
   private dashEdge = false;
   private pauseEdge = false;
   private interactEdge = false;
+  private invEdge = false;
+  private questEdge = false;
+  private rulesEdge = false;
+  private zoomEdge = false;
   enabled = false;
   private el: HTMLElement;
   private unsub: (() => void)[] = [];
+  private lastForwardUp = -1;
+  private sprintLatch = false;
+  zoomOn = false;
 
   constructor(el: HTMLElement) {
     this.el = el;
@@ -101,18 +161,16 @@ export class Input {
       const ev = e as KeyboardEvent;
       if (!this.enabled) return;
       this.keys.add(ev.code);
-      if (
-        ["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyF", "KeyR", "KeyE"].includes(
-          ev.code,
-        )
-      ) {
-        ev.preventDefault();
-      }
+      if (GAME_CODES.has(ev.code)) ev.preventDefault();
       if (ev.code === "KeyF") this.ssjEdge = true;
       if (ev.code === "KeyR") this.dashEdge = true;
       if (ev.code === "Escape" || ev.code === "KeyP") this.pauseEdge = true;
       if (ev.code === "KeyQ") this.kiEdge = true;
       if (ev.code === "KeyE") this.interactEdge = true;
+      if (ev.code === "KeyI") this.invEdge = true;
+      if (ev.code === "KeyJ" || ev.code === "Tab") this.questEdge = true;
+      if (ev.code === "KeyH") this.rulesEdge = true;
+      if (ev.code === "KeyZ") this.zoomEdge = true;
     });
     on(window, "keyup", (e) => {
       const code = (e as KeyboardEvent).code;
@@ -145,9 +203,6 @@ export class Input {
       if (!this.enabled) return;
       const ev = e as PointerEvent;
       if (document.pointerLockElement === el) return;
-      if (ev.button !== 0 && ev.pointerType !== "touch") {
-        /* right already handled */
-      }
       if (ev.pointerType === "mouse" && ev.button === 0) {
         this.dragging = true;
         this.dragDist = 0;
@@ -210,6 +265,7 @@ export class Input {
   poll(): Actions {
     const a: Actions = { ...EMPTY };
     const k = this.keys;
+    const now = performance.now();
 
     let mx = 0;
     let my = 0;
@@ -220,34 +276,60 @@ export class Input {
     mx += this.touchMove.x;
     my += this.touchMove.y;
 
+    const wNow = k.has("KeyW") || k.has("ArrowUp") || this.touchMove.y > 0.65;
+    const wWas = this.prevKeys.has("KeyW") || this.prevKeys.has("ArrowUp");
+    if (wNow && !wWas) {
+      if (now - this.lastForwardUp < 280) this.sprintLatch = true;
+    }
+    if (!wNow) {
+      if (wWas) this.lastForwardUp = now;
+      this.sprintLatch = false;
+    }
+
     const gp = typeof navigator !== "undefined" ? navigator.getGamepads?.()[0] : null;
     if (gp && gp.mapping === "standard") {
       const pressedN = gp.buttons.reduce((n, b) => n + (b?.pressed ? 1 : 0), 0);
       const ghost = pressedN >= 6;
       if (!ghost) {
-      const st = radial(gp.axes[0] ?? 0, gp.axes[1] ?? 0);
-      mx += st.x;
-      my -= st.y;
-      const look = radial(gp.axes[2] ?? 0, gp.axes[3] ?? 0, 0.18);
-      a.lookX += look.x * 0.04;
-      a.lookY += look.y * 0.04;
-      if (gp.buttons[0]?.pressed) a.jump = true;
-      if (gp.buttons[0]?.pressed && !this.prevPadA) a.jumpPressed = true;
-      if (gp.buttons[7]?.pressed || gp.buttons[5]?.pressed) {
-        a.ki = true;
-        if (!this.prevPadKi) a.kiPressed = true;
-      } else if (this.prevPadKi) {
-        a.kiReleased = true;
-      }
-      if (gp.buttons[2]?.pressed) {
-        a.punch = true;
-        if (!this.prevPadPunch) a.punchPressed = true;
-      }
-      if (gp.buttons[1]?.pressed && !this.prevPadDash) a.dashPressed = true;
-      this.prevPadA = !!gp.buttons[0]?.pressed;
-      this.prevPadKi = !!(gp.buttons[7]?.pressed || gp.buttons[5]?.pressed);
-      this.prevPadPunch = !!gp.buttons[2]?.pressed;
-      this.prevPadDash = !!gp.buttons[1]?.pressed;
+        const st = radial(gp.axes[0] ?? 0, gp.axes[1] ?? 0);
+        mx += st.x;
+        my -= st.y;
+        const look = radial(gp.axes[2] ?? 0, gp.axes[3] ?? 0, 0.18);
+        a.lookX += look.x * 0.04;
+        a.lookY += look.y * 0.04;
+        if (gp.buttons[0]?.pressed) a.jump = true;
+        if (gp.buttons[0]?.pressed && !this.prevPadA) a.jumpPressed = true;
+        if (gp.buttons[4]?.pressed) a.crouch = true;
+        if (gp.buttons[5]?.pressed || gp.buttons[10]?.pressed) a.sprint = true;
+        const lt = gp.buttons[6]?.value ?? 0;
+        if (lt > 0.35) a.crouch = true;
+        if (gp.buttons[7]?.pressed || gp.buttons[7]?.value > 0.4) {
+          a.ki = true;
+          if (!this.prevPadKi) a.kiPressed = true;
+        } else if (this.prevPadKi) {
+          a.kiReleased = true;
+        }
+        if (gp.buttons[2]?.pressed) {
+          a.punch = true;
+          if (!this.prevPadPunch) a.punchPressed = true;
+        }
+        if (gp.buttons[1]?.pressed && !this.prevPadDash) a.dashPressed = true;
+        if (gp.buttons[3]?.pressed && !this.prevPadY) a.interactPressed = true;
+        if (gp.buttons[9]?.pressed && !this.prevPadStart) a.pausePressed = true;
+        if (gp.buttons[8]?.pressed && !this.prevPadBack) a.invPressed = true;
+        if (gp.buttons[11]?.pressed && !this.prevPadRs) this.zoomOn = !this.zoomOn;
+        if (gp.buttons[14]?.pressed && !this.prevPadLeft) a.scroll = -1;
+        if (gp.buttons[15]?.pressed && !this.prevPadRight) a.scroll = 1;
+        this.prevPadA = !!gp.buttons[0]?.pressed;
+        this.prevPadKi = !!(gp.buttons[7]?.pressed || (gp.buttons[7]?.value ?? 0) > 0.4);
+        this.prevPadPunch = !!gp.buttons[2]?.pressed;
+        this.prevPadDash = !!gp.buttons[1]?.pressed;
+        this.prevPadY = !!gp.buttons[3]?.pressed;
+        this.prevPadStart = !!gp.buttons[9]?.pressed;
+        this.prevPadBack = !!gp.buttons[8]?.pressed;
+        this.prevPadRs = !!gp.buttons[11]?.pressed;
+        this.prevPadLeft = !!gp.buttons[14]?.pressed;
+        this.prevPadRight = !!gp.buttons[15]?.pressed;
       }
     }
 
@@ -270,8 +352,26 @@ export class Input {
     a.jumpPressed = (!this.prevKeys.has("Space") && k.has("Space")) || this.touchJumpPressed || a.jumpPressed;
     this.touchJumpPressed = false;
 
-    a.flyDown = k.has("ControlLeft") || k.has("ControlRight") || k.has("KeyC") || this.touchDown;
-    a.sprint = k.has("ShiftLeft") || k.has("ShiftRight");
+    a.crouch =
+      a.crouch ||
+      k.has("ShiftLeft") ||
+      k.has("ShiftRight") ||
+      k.has("KeyC") ||
+      this.touchCrouch ||
+      this.touchDown;
+    a.flyDown = a.crouch;
+    a.sprint =
+      (a.sprint ||
+        k.has("ControlLeft") ||
+        k.has("ControlRight") ||
+        this.sprintLatch ||
+        this.touchSprint) &&
+      !a.crouch &&
+      a.moveY > 0.15;
+
+    if (this.zoomEdge) this.zoomOn = !this.zoomOn;
+    this.zoomEdge = false;
+    a.zoom = this.zoomOn;
 
     const locked = document.pointerLockElement === this.el;
     a.punch = this.touchPunch || a.punch || (this.punchHeld && (locked || this.dragDist < 10));
@@ -301,17 +401,24 @@ export class Input {
     this.dashEdge = false;
     this.touchDashPressed = false;
 
-    a.pausePressed = this.pauseEdge;
+    a.pausePressed = this.pauseEdge || a.pausePressed;
     this.pauseEdge = false;
 
-    a.interactPressed = this.interactEdge || this.touchInteractPressed;
+    a.interactPressed = this.interactEdge || this.touchInteractPressed || a.interactPressed;
     this.interactEdge = false;
     this.touchInteractPressed = false;
 
-    for (let i = 1; i <= 5; i++) {
+    a.invPressed = this.invEdge || a.invPressed;
+    this.invEdge = false;
+    a.questPressed = this.questEdge;
+    this.questEdge = false;
+    a.rulesPressed = this.rulesEdge;
+    this.rulesEdge = false;
+
+    for (let i = 1; i <= 9; i++) {
       if (k.has(`Digit${i}`) && !this.prevKeys.has(`Digit${i}`)) a.hotbar = i - 1;
     }
-    a.scroll = this.scrollAcc;
+    if (!a.scroll) a.scroll = this.scrollAcc;
     this.scrollAcc = 0;
 
     this.prevKeys = new Set(k);
@@ -322,6 +429,12 @@ export class Input {
   private prevPadKi = true;
   private prevPadPunch = true;
   private prevPadDash = true;
+  private prevPadY = true;
+  private prevPadStart = true;
+  private prevPadBack = true;
+  private prevPadRs = true;
+  private prevPadLeft = true;
+  private prevPadRight = true;
   touchJumpPressed = false;
   touchPunchPressed = false;
   touchPlacePressed = false;

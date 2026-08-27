@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.6.3 — 2026-08-27
+
+- Camera: FPS yaw/pitch rig only (no lookAt leftover from title), stable eye lerp, quieter bob/shake, tighter FOV
+- Menus: left editorial sheet instead of generic centered cards (numbered modes, hairline rules)
+
+## 0.6.2 — 2026-08-27
+
+- Controls: sneak (Shift, edge-lock), sprint (Ctrl / double-tap W), zoom (Z), fly boost, ice slide, hold-to-place, look-sway fists, land dip, gamepad rumble
+- Assets: Namek grass (olive-yellow), Ajisa wood (violet bark), glyph temple bricks, hexagonal ki crystal, teal water, circuit metal
+- Swim up is world-up. Place repeats while held.
+
+## 0.6.1 — 2026-08-27
+
+- Controls: WASD is straight (W vor, A links, D rechts, S zurück). Ki-Flug no longer dives with the look; Space up, Shift down
+- Blocks: wrap-seamless atlas (grass tufts, wood grain, temple bricks, lava veins, ice cracks, metal rivets)
+- Menus: live world behind the title, solid sheets, isometric hotbar cubes, quieter type
+- HUD chips and panels share one surface language
+
+## 0.6.0 — 2026-08-27
+
+- Three modes: Kampagne (story), Kreativ (infinite blocks, no damage), Freies Spiel
+- Inventory: mining fills the bag, placing spends stacks; I opens the grid, 1–9 hotbar
+- Quest log with progress bars, rules overlay at mode start, J / H / Pause shortcuts
+- Creative tasks: mine, place, palette, tower, flight, shrine, cloud edge
+- Sandbox tasks: orbs, hunts, camp, Super Saiyan
+- Save slot `kiblox-save-v6` (inventory, mode, quest progress)
+
 ## 0.5.1 — 2026-08-27
 
 - Characters: Minecraft 32px / 1.8 m humanoids, painted pixel faces/gi, jointed walk-run-fly-punch

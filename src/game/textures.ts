@@ -38,18 +38,50 @@ function hash(n: number) {
   return (n >>> 0) / 4294967296;
 }
 
-function noise2(x: number, y: number) {
+function wrap(i: number, n: number) {
+  return ((i % n) + n) % n;
+}
+
+function hash2(x: number, y: number) {
+  return hash(wrap(x | 0, TILE) * 374761 + wrap(y | 0, TILE) * 668265);
+}
+
+/** Seamless value noise. `cell` (px) must divide TILE. */
+function valueNoise(px: number, py: number, cell: number) {
+  const period = TILE / cell;
+  const x = px / cell;
+  const y = py / cell;
   const xi = Math.floor(x);
   const yi = Math.floor(y);
   const fx = x - xi;
   const fy = y - yi;
   const u = fx * fx * (3 - 2 * fx);
   const v = fy * fy * (3 - 2 * fy);
-  const a = hash(xi * 374761 + yi * 668265);
-  const b = hash((xi + 1) * 374761 + yi * 668265);
-  const c = hash(xi * 374761 + (yi + 1) * 668265);
-  const d = hash((xi + 1) * 374761 + (yi + 1) * 668265);
+  const x0 = wrap(xi, period);
+  const x1 = wrap(xi + 1, period);
+  const y0 = wrap(yi, period);
+  const y1 = wrap(yi + 1, period);
+  const a = hash(x0 * 374761 + y0 * 668265);
+  const b = hash(x1 * 374761 + y0 * 668265);
+  const c = hash(x0 * 374761 + y1 * 668265);
+  const d = hash(x1 * 374761 + y1 * 668265);
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+
+function fbm(x: number, y: number) {
+  return valueNoise(x, y, 16) * 0.5 + valueNoise(x, y, 8) * 0.32 + valueNoise(x, y, 4) * 0.18;
+}
+
+function rgb(r: number, g: number, b: number): [number, number, number] {
+  return [clamp255(r), clamp255(g), clamp255(b)];
+}
+
+function waveX(x: number, periods: number) {
+  return Math.sin(((x + 0.5) / TILE) * Math.PI * 2 * periods);
+}
+
+function waveY(y: number, periods: number) {
+  return Math.sin(((y + 0.5) / TILE) * Math.PI * 2 * periods);
 }
 
 function setPx(
@@ -159,124 +191,191 @@ export function createAtlasTexture(): THREE.CanvasTexture {
   const d = img.data;
 
   fillTile(d, TILE_GRASS_TOP, (x, y) => {
-    const n = noise2(x * 0.28, y * 0.28);
-    const n2 = noise2(x * 0.9, y * 0.9);
-    const blade = hash(x * 91 + y * 17) > 0.82 ? 22 : 0;
-    const tuft = n2 > 0.72 ? 18 : 0;
-    return [clamp255(36 + n * 28 + blade), clamp255(128 + n * 48 + tuft), clamp255(38 + n * 22)];
+    const n = fbm(x, y);
+    const speck = hash2(x, y);
+    let r = 112 + n * 22;
+    let g = 148 + n * 20;
+    let b = 36 + n * 10;
+    if (speck > 0.78) {
+      r = 72 + n * 12;
+      g = 118 + n * 16;
+      b = 28;
+    } else if (speck < 0.08) {
+      r += 28;
+      g += 10;
+    }
+    return rgb(r, g, b);
   });
   fillTile(d, TILE_GRASS_SIDE, (x, y) => {
-    if (y < 12) {
-      const n = noise2(x * 0.4, y * 0.4);
-      return [clamp255(52 + n * 24), clamp255(122 + n * 28), clamp255(44 + n * 16)];
+    const dirtN = fbm(x, y);
+    const pebble = hash2(x, y) > 0.93 ? -18 : 0;
+    const dirt: [number, number, number] = [
+      148 + dirtN * 16 + pebble,
+      86 + dirtN * 12 + pebble,
+      52 + dirtN * 8,
+    ];
+    if (y < 11) {
+      const n = fbm(x, y);
+      const blade = hash2(x, y) > 0.8 ? 18 : 0;
+      return rgb(108 + n * 18 + (blade ? -18 : 8), 140 + n * 16, 34 + n * 8);
     }
-    const n = noise2(x * 0.25, y * 0.25);
-    return [clamp255(118 + n * 28), clamp255(78 + n * 18), clamp255(42 + n * 12)];
+    if (y < 15) {
+      const t = (y - 11) / 4;
+      return rgb(
+        108 + (dirt[0] - 108) * t,
+        140 + (dirt[1] - 140) * t,
+        34 + (dirt[2] - 34) * t,
+      );
+    }
+    return rgb(dirt[0], dirt[1], dirt[2]);
   });
   fillTile(d, TILE_DIRT, (x, y) => {
-    const n = noise2(x * 0.3, y * 0.3);
-    const p = hash(x * 13 + y * 71) > 0.92 ? -20 : 0;
-    return [clamp255(124 + n * 22 + p), clamp255(82 + n * 14 + p), clamp255(46 + n * 10)];
+    const n = fbm(x, y);
+    const pebble = hash2(x, y);
+    let r = 148 + n * 18;
+    let g = 86 + n * 12;
+    let b = 52 + n * 8;
+    if (pebble > 0.91) {
+      r -= 22;
+      g -= 14;
+      b -= 8;
+    } else if (pebble < 0.07) {
+      r += 16;
+      g += 10;
+    }
+    return rgb(r, g, b);
   });
   fillTile(d, TILE_STONE, (x, y) => {
-    const n = noise2(x * 0.22, y * 0.22);
-    const crack = hash(x * 3 + y * 11) > 0.94 ? -30 : 0;
-    const g = 96 + n * 28 + crack;
-    return [clamp255(g - 4), clamp255(g + 4), clamp255(g - 2)];
+    const n = fbm(x, y);
+    const cell = valueNoise(x, y, 8);
+    const crack =
+      Math.abs(waveX(x, 4) * waveY(y, 3)) > 0.92 || hash2(x, y) > 0.97 ? -28 : 0;
+    const g = 102 + n * 22 + (cell - 0.5) * 18 + crack;
+    return rgb(g - 6, g + 2, g - 2);
   });
   fillTile(d, TILE_SAND, (x, y) => {
-    const n = noise2(x * 0.4, y * 0.4);
-    return [clamp255(198 + n * 20), clamp255(178 + n * 16), clamp255(110 + n * 12)];
+    const n = fbm(x, y);
+    const grain = hash2(x, y);
+    let r = 210 + n * 16;
+    let g = 186 + n * 14;
+    let b = 118 + n * 10;
+    if (grain > 0.9) {
+      r -= 24;
+      g -= 18;
+      b -= 10;
+    }
+    return rgb(r, g, b);
   });
   fillTile(d, TILE_WOOD, (x, y) => {
-    const ring = Math.sin(x * 0.9) * 10;
-    const n = noise2(x * 0.15, y * 0.5);
-    return [clamp255(92 + ring + n * 16), clamp255(58 + ring * 0.5 + n * 10), clamp255(32 + n * 8)];
+    const grain = waveX(x, 8) * 11 + (valueNoise(x, y, 8) - 0.5) * 10;
+    const pith = Math.abs(waveX(x, 4)) > 0.92 ? -16 : 0;
+    const knot = hash2(x, y >> 2) > 0.96 ? -22 : 0;
+    const n = valueNoise(x, y, 4);
+    return rgb(78 + grain + pith + knot, 54 + grain * 0.4, 86 + grain * 0.45);
   });
   fillTile(d, TILE_LEAVES, (x, y) => {
-    const n = noise2(x * 0.5, y * 0.5);
-    const hole = hash(x * 29 + y * 47) > 0.78;
-    if (hole) return [28, 64, 36];
-    return [clamp255(36 + n * 20), clamp255(96 + n * 36), clamp255(48 + n * 16)];
+    const n = fbm(x, y);
+    const hole = hash2(x, y) > 0.8;
+    if (hole) return rgb(48, 78, 22);
+    const vein = Math.abs(waveX(x, 6) + waveY(y, 5)) < 0.12 ? 12 : 0;
+    return rgb(118 + n * 24, 158 + n * 22 + vein, 40 + n * 10);
   });
   fillTile(d, TILE_KI, (x, y) => {
-    const cx = x - 32;
-    const cy = y - 32;
-    const r = Math.hypot(cx, cy);
-    const n = noise2(x * 0.45, y * 0.45);
-    const core = Math.max(0, 1 - r / 32);
-    const facet = Math.abs(Math.sin(x * 0.6) * Math.cos(y * 0.6));
-    return [
-      clamp255(30 + core * 200 + facet * 40 + n * 20),
-      clamp255(160 + core * 90 + n * 24),
-      clamp255(210 + core * 45),
-    ];
+    const hx = Math.abs(wrap(x + 8, 16) - 8) / 8;
+    const hy = Math.abs(wrap(y + 8, 16) - 8) / 8;
+    const hex = hx * 0.65 + hy * 0.35;
+    const n = fbm(x, y);
+    if (hex > 0.78) return rgb(20 + n * 10, 90 + n * 20, 130);
+    return rgb(40 + (1 - hex) * 80, 190 + n * 20, 220 + (1 - hex) * 30);
   });
   fillTile(d, TILE_BEDROCK, (x, y) => {
-    const n = noise2(x * 0.55, y * 0.55);
-    const g = 28 + n * 22;
-    return [clamp255(g), clamp255(g + 4), clamp255(g + 2)];
+    const n = fbm(x, y);
+    const speck = hash2(x, y) > 0.9 ? 18 : 0;
+    const g = 32 + n * 20 + speck;
+    return rgb(g, g + 3, g + 6);
   });
   fillTile(d, TILE_WATER, (x, y) => {
-    const n = noise2(x * 0.2, y * 0.35);
-    const band = Math.sin((x + y) * 0.45) * 12;
-    return [clamp255(28 + n * 18), clamp255(118 + n * 30 + band), clamp255(148 + n * 28 + band)];
+    const n = fbm(x, y);
+    const caustic = waveX(x, 3) * 0.5 + waveY(y, 2) * 0.5;
+    const band = caustic * 16;
+    return rgb(18 + n * 10, 168 + n * 18 + band, 176 + n * 16 + band);
   });
   fillTile(d, TILE_MOSS, (x, y) => {
-    const n = noise2(x * 0.3, y * 0.3);
-    const moss = hash(x * 19 + y * 41) > 0.55;
-    if (moss) return [clamp255(48 + n * 16), clamp255(102 + n * 28), clamp255(44 + n * 12)];
-    const g = 88 + n * 22;
-    return [clamp255(g - 6), clamp255(g + 8), clamp255(g - 4)];
+    const n = fbm(x, y);
+    const moss = hash2(x, y) > 0.42;
+    if (moss) return rgb(44 + n * 16, 108 + n * 26, 46 + n * 12);
+    const g = 96 + n * 18;
+    return rgb(g - 8, g + 6, g - 4);
   });
   fillTile(d, TILE_TEMPLE, (x, y) => {
-    const n = noise2(x * 0.2, y * 0.2);
-    return [clamp255(186 + n * 16), clamp255(176 + n * 14), clamp255(148 + n * 12)];
+    const bw = 8;
+    const bh = 8;
+    const col = wrap(Math.floor(x / bw), TILE / bw);
+    const row = wrap(Math.floor(y / bh), TILE / bh);
+    const lx = wrap(x, bw);
+    const ly = wrap(y, bh);
+    const mortar = lx === 0 || ly === 0;
+    const n = valueNoise(x, y, 8);
+    if (mortar) return rgb(118 + n * 8, 96 + n * 6, 64);
+    const seed = col * 17 + row * 31;
+    const stroke =
+      (lx === 2 || lx === 5 || ly === 2 || ly === 5 || wrap(lx + ly + seed, 5) === 0) &&
+      hash2(col, row) > 0.35;
+    if (stroke && lx > 1 && ly > 1 && lx < 7 && ly < 7) return rgb(92, 64, 36);
+    return rgb(196 + n * 10, 168 + n * 8, 118 + n * 6);
   });
   fillTile(d, TILE_CLAY, (x, y) => {
-    const n = noise2(x * 0.35, y * 0.35);
-    return [clamp255(168 + n * 22), clamp255(92 + n * 16), clamp255(54 + n * 10)];
+    const n = fbm(x, y);
+    const pit = hash2(x, y) > 0.94 ? -20 : 0;
+    return rgb(176 + n * 18 + pit, 98 + n * 12 + pit, 58 + n * 8);
   });
   fillTile(d, TILE_CLOUD, (x, y) => {
-    const n = noise2(x * 0.18, y * 0.18);
-    return [clamp255(220 + n * 20), clamp255(236 + n * 12), clamp255(232 + n * 14)];
+    const n = fbm(x, y);
+    const puff = valueNoise(x, y, 16);
+    return rgb(226 + n * 12 + puff * 8, 234 + n * 10, 240 + n * 8);
   });
   fillTile(d, TILE_WOOD_TOP, (x, y) => {
-    const n = noise2(x * 0.22, y * 0.22);
-    const ring = Math.sin((x + y) * 0.35 + n) * 10;
-    return [clamp255(128 + ring + n * 8), clamp255(86 + ring * 0.6), clamp255(48 + n * 6)];
+    const dx = x - 31.5;
+    const dy = y - 31.5;
+    const r = Math.hypot(dx, dy);
+    const ring = Math.sin(r * 0.55) * 10;
+    const n = valueNoise(x, y, 8);
+    return rgb(112 + ring + n * 6, 86 + ring * 0.4, 118 + ring * 0.5);
   });
   fillTile(d, TILE_PATH, (x, y) => {
-    const n = noise2(x * 0.32, y * 0.32);
-    const p = hash(x * 21 + y * 53) > 0.9 ? 18 : 0;
-    return [clamp255(168 + n * 18 + p), clamp255(132 + n * 14 + p), clamp255(78 + n * 10)];
+    const n = fbm(x, y);
+    const pebble = hash2(x, y) > 0.88 ? 20 : 0;
+    return rgb(162 + n * 16 + pebble, 128 + n * 12 + pebble, 74 + n * 8);
   });
   fillTile(d, TILE_SNOW, (x, y) => {
-    const n = noise2(x * 0.4, y * 0.4);
-    const spark = hash(x * 11 + y * 29) > 0.92 ? 30 : 0;
-    return [clamp255(228 + n * 18 + spark), clamp255(236 + n * 14 + spark), clamp255(242 + n * 10)];
+    const n = fbm(x, y);
+    const spark = hash2(x, y) > 0.93 ? 28 : 0;
+    return rgb(232 + n * 12 + spark, 238 + n * 10 + spark, 246 + n * 6);
   });
   fillTile(d, TILE_ICE, (x, y) => {
-    const n = noise2(x * 0.22, y * 0.5);
-    const crack = hash(x * 7 + y * 13) > 0.94 ? -40 : 0;
-    return [clamp255(140 + n * 40 + crack), clamp255(198 + n * 30), clamp255(220 + n * 20)];
+    const n = fbm(x, y);
+    const crack = Math.abs(waveX(x, 5) + waveY(y, 2)) < 0.08 ? -36 : 0;
+    const sheen = waveX(x, 2) * 10;
+    return rgb(148 + n * 28 + crack + sheen, 206 + n * 18, 228 + n * 12);
   });
   fillTile(d, TILE_LAVA, (x, y) => {
-    const n = noise2(x * 0.18, y * 0.18);
-    const crack = noise2(x * 0.55 + 9, y * 0.55) > 0.62;
-    return crack
-      ? [clamp255(220 + n * 30), clamp255(90 + n * 40), 24]
-      : [clamp255(48 + n * 20), clamp255(18 + n * 10), 12];
+    const crust = fbm(x, y);
+    const vein = valueNoise(x, y, 8);
+    if (vein > 0.58) return rgb(232 + crust * 20, 92 + crust * 40, 18);
+    return rgb(42 + crust * 18, 16 + crust * 8, 10);
   });
   fillTile(d, TILE_METAL, (x, y) => {
-    const n = noise2(x * 0.3, y * 0.12);
-    const rivet = hash(x * 17 + y * 41) > 0.96 ? 40 : 0;
-    return [clamp255(92 + n * 28 + rivet), clamp255(98 + n * 24 + rivet), clamp255(108 + n * 22)];
+    const brush = valueNoise(x, y, 2);
+    const trace = wrap(x + y * 2, 16) === 0 || wrap(x, 16) === 3;
+    if (trace && hash2(x >> 2, y >> 2) > 0.45) return rgb(70, 170, 190);
+    const n = brush * 18;
+    return rgb(68 + n, 74 + n, 86 + n);
   });
   fillTile(d, TILE_BASALT, (x, y) => {
-    const n = noise2(x * 0.26, y * 0.26);
-    const pore = hash(x * 23 + y * 19) > 0.88 ? -28 : 0;
-    return [clamp255(42 + n * 18 + pore), clamp255(40 + n * 16 + pore), clamp255(44 + n * 14)];
+    const n = fbm(x, y);
+    const pore = hash2(x, y) > 0.86 ? -26 : 0;
+    const hex = Math.abs(waveX(x, 4) * waveY(y, 3)) > 0.88 ? -10 : 0;
+    return rgb(44 + n * 16 + pore + hex, 40 + n * 14 + pore, 46 + n * 12 + pore);
   });
 
   ctx.putImageData(img, 0, 0);
@@ -284,29 +383,7 @@ export function createAtlasTexture(): THREE.CanvasTexture {
 }
 
 export function loadAtlasTexture(): Promise<THREE.Texture> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (tex: THREE.Texture) => {
-      if (settled) return;
-      settled = true;
-      resolve(tex);
-    };
-    const t = window.setTimeout(() => finish(createAtlasTexture()), 4000);
-    const loader = new THREE.TextureLoader();
-    loader.setCrossOrigin("anonymous");
-    loader.load(
-      "/game/atlas.png",
-      (tex) => {
-        window.clearTimeout(t);
-        finish(styleAtlas(tex));
-      },
-      undefined,
-      () => {
-        window.clearTimeout(t);
-        finish(createAtlasTexture());
-      },
-    );
-  });
+  return Promise.resolve(createAtlasTexture());
 }
 
 export function loadGameTexture(url: string): Promise<THREE.Texture | null> {

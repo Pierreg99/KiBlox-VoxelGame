@@ -538,13 +538,27 @@ export function poseViewArms(
   grounded: boolean,
   flying: boolean,
   superSaiyan: boolean,
+  lookSwayX = 0,
+  lookSwayY = 0,
+  crouch = false,
 ) {
   const punch = punchT > 0 ? Math.sin((punchT / 0.22) * Math.PI) : 0;
   const walk = grounded && !flying ? Math.sin(bob) : 0;
-  fists.right.position.set(0.38, -0.22 + walk * 0.02, -0.48 - punch * 0.42);
-  fists.left.position.set(-0.38, -0.22 - walk * 0.02, -0.48 - punch * 0.12);
-  fists.right.rotation.x = 0.42 - punch * 1.05;
-  fists.left.rotation.x = 0.42 - punch * 0.28;
+  const dip = crouch ? -0.1 : 0;
+  fists.right.position.set(
+    0.38 + lookSwayX * 0.14,
+    -0.22 + dip + walk * 0.02 - lookSwayY * 0.1,
+    -0.48 - punch * 0.42,
+  );
+  fists.left.position.set(
+    -0.38 + lookSwayX * 0.14,
+    -0.22 + dip - walk * 0.02 - lookSwayY * 0.1,
+    -0.48 - punch * 0.12,
+  );
+  fists.right.rotation.x = 0.42 - punch * 1.05 - lookSwayY * 0.35;
+  fists.left.rotation.x = 0.42 - punch * 0.28 - lookSwayY * 0.25;
+  fists.right.rotation.y = lookSwayX * 0.2;
+  fists.left.rotation.y = lookSwayX * 0.2;
   const rf = fists.right.getObjectByName("forearmG") as THREE.Group | undefined;
   const lf = fists.left.getObjectByName("forearmG") as THREE.Group | undefined;
   if (rf) rf.rotation.x = -punch * 0.45;

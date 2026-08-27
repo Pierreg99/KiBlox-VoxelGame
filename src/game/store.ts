@@ -1,10 +1,31 @@
 import { create } from "zustand";
 import { BALL_COUNT, HOTBAR, MAX_ENERGY, MAX_HEALTH, START_POWER } from "./constants";
 import type { PlanetId, Stage } from "./campaign";
+import type { GameMode } from "./quests";
 
-export type Phase = "title" | "loading" | "playing" | "paused" | "wish" | "dead" | "story" | "warp";
+export type Phase =
+  | "title"
+  | "loading"
+  | "playing"
+  | "paused"
+  | "wish"
+  | "dead"
+  | "story"
+  | "warp"
+  | "inventory"
+  | "quests"
+  | "rules";
 
 export type RadarBlip = { id: number; angle: number; dist: number; stars: number };
+
+export type QuestRow = {
+  id: string;
+  title: string;
+  hint: string;
+  value: number;
+  target: number;
+  complete: boolean;
+};
 
 export type HudState = {
   phase: Phase;
@@ -18,6 +39,7 @@ export type HudState = {
   balls: boolean[];
   selected: number;
   hotbar: number[];
+  inventory: number[];
   toast: string | null;
   target: string | null;
   radar: RadarBlip[];
@@ -34,10 +56,17 @@ export type HudState = {
   dashReady: boolean;
   combo: number;
   campaign: boolean;
+  mode: GameMode;
   planet: PlanetId;
   planetName: string;
   stage: Stage;
   quest: string;
+  questHint: string;
+  questValue: number;
+  questTarget: number;
+  questDone: number;
+  questTotal: number;
+  questList: QuestRow[];
   storySpeaker: string;
   storyText: string;
   storyPortrait: string;
@@ -58,6 +87,7 @@ const initial: HudState = {
   balls: Array.from({ length: BALL_COUNT }, () => false),
   selected: 0,
   hotbar: [...HOTBAR],
+  inventory: Array.from({ length: 20 }, () => 0),
   toast: null,
   target: null,
   radar: [],
@@ -74,10 +104,17 @@ const initial: HudState = {
   dashReady: true,
   combo: 0,
   campaign: false,
+  mode: "story",
   planet: "verdant",
   planetName: "Verdant",
   stage: "intro",
   quest: "",
+  questHint: "",
+  questValue: 0,
+  questTarget: 1,
+  questDone: 0,
+  questTotal: 0,
+  questList: [],
   storySpeaker: "",
   storyText: "",
   storyPortrait: "",

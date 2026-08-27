@@ -14,11 +14,15 @@ import {
   AIR_ACCEL,
   COYOTE_TIME,
   FLY_ACCEL,
+  FLY_BOOST,
   FLY_DRAG,
   FLY_SPEED,
   GRASS,
   GRAVITY,
+  CREATIVE_HOTBAR,
   HOTBAR,
+  ICE,
+  INV_STACK,
   JUMP_BUFFER,
   JUMP_VEL,
   KI,
@@ -26,6 +30,7 @@ import {
   LEAVES,
   MAX_ENERGY,
   MAX_HEALTH,
+  PLACE_DELAY,
   PLAYER_H,
   PLAYER_HW,
   REACH,
@@ -33,6 +38,7 @@ import {
   SAVE_VERSION,
   SEA_LEVEL,
   SNAP_DOWN,
+  SNEAK_SPEED,
   SPRINT_SPEED,
   SSJ_MUL,
   SSJ_POWER,
@@ -49,7 +55,6 @@ import {
 import { GameAudio } from "./audio";
 import {
   PLANETS,
-  PLANET_ORDER,
   SPECIES,
   kindLabel,
   nextPlanet,
@@ -57,8 +62,20 @@ import {
   type Stage,
   type StoryLine,
 } from "./campaign";
+import {
+  chainFor,
+  completeReady,
+  countTypes,
+  describeQuest,
+  emptyStats,
+  isCloud,
+  isSacred,
+  starterInv,
+  type GameMode,
+  type QuestStats,
+} from "./quests";
 import { hpFor, makeBeing, makeViewArms, poseBeing, poseViewArms } from "./beings";
-import { Input } from "./input";
+import { Input, rumble } from "./input";
 import { meshChunk } from "./mesher";
 import { clearSave, hasSave, loadSave, writeSave, type SaveData } from "./save";
 import type { Phase } from "./store";
@@ -127,7 +144,7 @@ const _look = new THREE.Vector3();
 export class GameEngine {
   renderer: THREE.WebGLRenderer;
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(78, 1, 0.08, 180);
+  camera = new THREE.PerspectiveCamera(78, 1, 0.05, 220);
   input: Input;
   audio = new GameAudio();
   world: World;
@@ -153,11 +170,16 @@ export class GameEngine {
   private npcMeshes: THREE.Group[] = [];
   private heroMesh: THREE.Group | null = null;
   campaign = false;
+  mode: GameMode = "story";
   planet: PlanetId = "verdant";
   stage: Stage = "intro";
   unlocked: PlanetId[] = ["verdant"];
   bossDown: PlanetId[] = [];
   private storyQ: StoryLine[] = [];
+  inv: number[] = starterInv();
+  hotbarIds: number[] = [...HOTBAR];
+  stats: QuestStats = emptyStats();
+  questDone: string[] = [];
   energy = MAX_ENERGY;
   private charge = 0;
   private mineT = 0;
@@ -194,6 +216,11 @@ export class GameEngine {
   private hitstop = 0;
   private bob = 0;
   private stepAcc = 0;
+  private landDip = 0;
+  private lookSwayX = 0;
+  private lookSwayY = 0;
+  private sneaking = false;
+  private eyeLerp = EYE;
   private hudAcc = 0;
   private saveAcc = 0;
   private toastT = 0;
@@ -347,10 +374,15 @@ export class GameEngine {
     const existing = loadSave();
     if (existing) {
       this.campaign = existing.campaign;
+      this.mode = existing.mode;
       this.planet = existing.planet;
       this.stage = existing.stage;
       this.unlocked = existing.unlocked;
       this.bossDown = existing.bossDown;
+      this.inv = existing.inventory.slice();
+      this.hotbarIds = existing.hotbar.slice();
+      this.questDone = existing.questDone.slice();
+      this.stats = { ...emptyStats(), ...existing.stats };
       this.world = new World(existing.seed, existing.planet);
     } else {
       this.world = new World((Math.random() * 1e9) | 0, this.planet);
@@ -405,11 +437,14 @@ export class GameEngine {
       ssjReady: this.power >= SSJ_POWER,
       hasSave: hasSave(),
       campaign: this.campaign,
+      mode: this.mode,
       planet: this.planet,
       planetName: PLANETS[this.planet].name,
       stage: this.stage,
-      quest: this.questLine(),
+      hotbar: this.hotbarIds.slice(),
+      inventory: this.inv.slice(),
       unlocked: this.unlocked,
+      ...this.questPatch(),
     });
     this.beginLoop();
   }
@@ -481,15 +516,50 @@ export class GameEngine {
   }
 
   private questLine() {
-    if (!this.campaign) return "";
-    const P = PLANETS[this.planet];
-    const got = this.world.balls.filter((b) => b.taken).length;
-    if (this.stage === "intro") return `${P.name} · Sprich mit ${P.npc.name}`;
-    if (this.stage === "gather") return `${P.name} · Kugeln ${got}/7`;
-    if (this.stage === "boss") return `${P.name} · Besiege ${P.boss.name}`;
-    if (this.stage === "warp") return "Das Tor ist offen";
-    if (this.stage === "finale") return "Orryx wartet auf den letzten Wunsch";
-    return "Orbit-Saga beendet";
+    return this.questView().title;
+  }
+
+  private questView() {
+    this.syncStats();
+    return describeQuest(this.mode, this.planet, this.stage, this.stats, this.questDone);
+  }
+
+  private questPatch() {
+    const q = this.questView();
+    return {
+      quest: q.title,
+      questHint: q.hint,
+      questValue: q.value,
+      questTarget: q.target,
+      questDone: q.done,
+      questTotal: q.total,
+      questList: q.list,
+    };
+  }
+
+  private syncStats() {
+    this.stats.balls = this.world.balls.filter((b) => b.taken).length;
+    this.stats.power = this.power;
+    this.stats.types = countTypes(this.inv);
+    this.stats.bossDown = this.bossDown.includes(this.planet);
+    if (this.py - this.world.spawn.y >= 18) this.stats.sky = true;
+    const feet = this.world.get(Math.floor(this.px), Math.max(0, Math.floor(this.py - 0.05)), Math.floor(this.pz));
+    if (isCloud(feet)) this.stats.sky = true;
+  }
+
+  private noteQuest() {
+    this.syncStats();
+    if (this.mode === "story") {
+      useHud.getState().patch(this.questPatch());
+      return;
+    }
+    const ready = completeReady(chainFor(this.mode, this.planet), this.stats, this.questDone);
+    if (ready) {
+      this.questDone.push(ready.id);
+      this.audio.collect();
+      this.toast(`Aufgabe erfüllt: ${ready.title}`);
+    }
+    useHud.getState().patch(this.questPatch());
   }
 
   private rebuildChunk(cx: number, cy: number, cz: number) {
@@ -605,22 +675,24 @@ export class GameEngine {
     for (const g of ballGeos) g.dispose();
     this.ballMeshes = [];
     this.ballTex = [];
-    const geo = new THREE.SphereGeometry(0.28, 16, 12);
-    for (const b of this.world.balls) {
-      const tex = createBallTexture(b.stars, this.ballBase);
-      this.ballTex.push(tex);
-      const mat = new THREE.MeshStandardMaterial({
-        map: tex,
-        emissive: 0xe8b923,
-        emissiveIntensity: 0.85,
-        roughness: 0.35,
-        metalness: 0.22,
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(b.x, b.y, b.z);
-      mesh.visible = !b.taken;
-      this.scene.add(mesh);
-      this.ballMeshes.push(mesh);
+    if (this.mode !== "creative") {
+      const geo = new THREE.SphereGeometry(0.28, 16, 12);
+      for (const b of this.world.balls) {
+        const tex = createBallTexture(b.stars, this.ballBase);
+        this.ballTex.push(tex);
+        const mat = new THREE.MeshStandardMaterial({
+          map: tex,
+          emissive: 0xe8b923,
+          emissiveIntensity: 0.85,
+          roughness: 0.35,
+          metalness: 0.22,
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(b.x, b.y, b.z);
+        mesh.visible = !b.taken;
+        this.scene.add(mesh);
+        this.ballMeshes.push(mesh);
+      }
     }
 
     for (const e of this.enemies) {
@@ -635,11 +707,13 @@ export class GameEngine {
       });
     }
     this.enemies = [];
-    for (const s of this.world.enemies) {
-      const e = this.makeEnemy(s.x, s.y, s.z, s.power, s.kind, s.species);
-      e.name = s.name;
-      e.boss = s.boss;
-      this.enemies.push(e);
+    if (this.mode !== "creative") {
+      for (const s of this.world.enemies) {
+        const e = this.makeEnemy(s.x, s.y, s.z, s.power, s.kind, s.species);
+        e.name = s.name;
+        e.boss = s.boss;
+        this.enemies.push(e);
+      }
     }
 
     for (const m of this.npcMeshes) {
@@ -654,12 +728,14 @@ export class GameEngine {
       });
     }
     this.npcMeshes = [];
-    for (const n of this.world.npcs) {
-      const g = makeBeing("grunt", n.species);
-      g.scale.setScalar(1.12);
-      g.position.set(n.x, n.y, n.z);
-      this.scene.add(g);
-      this.npcMeshes.push(g);
+    if (this.mode === "story") {
+      for (const n of this.world.npcs) {
+        const g = makeBeing("grunt", n.species);
+        g.scale.setScalar(1.12);
+        g.position.set(n.x, n.y, n.z);
+        this.scene.add(g);
+        this.npcMeshes.push(g);
+      }
     }
 
     if (this.heroMesh) {
@@ -783,36 +859,66 @@ export class GameEngine {
     };
   }
 
-  playFromTitle(mode: "new" | "continue" | "campaign") {
+  playFromTitle(kind: "new" | "continue" | "campaign" | "story" | "creative" | "sandbox") {
     this.audio.unlock();
-    this.requestLock();
-    if (mode === "new") {
-      this.campaign = false;
-      void this.resetSameWorld();
+    if (kind === "campaign") kind = "story";
+    if (kind === "new") kind = "sandbox";
+    if (kind === "continue") {
+      this.requestLock();
+      this.input.enabled = true;
+      this.invuln = Math.max(this.invuln, 1.4);
+      this.setPhase("playing");
+      this.toast(this.questLine());
+      if (this.mode === "story" && this.stage === "intro") this.openStory(PLANETS[this.planet].intro);
       return;
     }
-    if (mode === "campaign") {
+    if (kind === "story") {
       this.campaign = true;
+      this.mode = "story";
       this.planet = "verdant";
       this.stage = "intro";
       this.unlocked = ["verdant"];
       this.bossDown = [];
+      this.inv = starterInv();
+      this.hotbarIds = [...HOTBAR];
+      this.questDone = [];
+      this.stats = emptyStats();
+      clearSave();
+      this.requestLock();
       if (this.world.planet === "verdant" && this.meshed) {
         this.resetAvatar();
         for (const b of this.world.balls) b.taken = false;
         for (const m of this.ballMeshes) m.visible = true;
         this.invuln = 1.4;
-        this.openStory(PLANETS.verdant.intro);
+        this.openRules(true);
         return;
       }
-      void this.resetSameWorld().then(() => this.openStory(PLANETS.verdant.intro));
+      void this.resetSameWorld().then(() => this.openRules(true));
       return;
     }
-    this.input.enabled = true;
-    this.invuln = Math.max(this.invuln, 1.4);
-    this.setPhase("playing");
-    this.toast(this.campaign ? this.questLine() : "Sammle die sieben Drachenkugeln");
-    if (this.campaign && this.stage === "intro") this.openStory(PLANETS[this.planet].intro);
+    if (kind === "creative") {
+      this.campaign = false;
+      this.mode = "creative";
+      this.planet = "verdant";
+      this.stage = "intro";
+      this.inv = starterInv();
+      this.hotbarIds = [...CREATIVE_HOTBAR];
+      this.questDone = [];
+      this.stats = emptyStats();
+      clearSave();
+      void this.resetSameWorld().then(() => this.openRules(false));
+      return;
+    }
+    this.campaign = false;
+    this.mode = "sandbox";
+    this.planet = "verdant";
+    this.stage = "intro";
+    this.inv = starterInv();
+    this.hotbarIds = [...HOTBAR];
+    this.questDone = [];
+    this.stats = emptyStats();
+    clearSave();
+    void this.resetSameWorld().then(() => this.openRules(false));
   }
 
   private async resetSameWorld() {
@@ -835,8 +941,15 @@ export class GameEngine {
     this.spawnEntities();
     this.invuln = 1.4;
     this.input.enabled = true;
-    this.setPhase("playing");
-    this.toast(this.campaign ? this.questLine() : "Sammle die sieben Drachenkugeln");
+    useHud.getState().patch({
+      campaign: this.campaign,
+      mode: this.mode,
+      hotbar: this.hotbarIds.slice(),
+      inventory: this.inv.slice(),
+      planet: this.planet,
+      planetName: PLANETS[this.planet].name,
+      ...this.questPatch(),
+    });
   }
 
   private resetAvatar() {
@@ -864,8 +977,17 @@ export class GameEngine {
     this.mineKey = "";
     this.punchT = 0;
     this.trauma = 0;
+    this.eyeLerp = EYE;
+    this.landDip = 0;
+    this.lookSwayX = 0;
+    this.lookSwayY = 0;
+    this.sneaking = false;
+    this.wishFov = 78;
+    this.camera.fov = 78;
+    this.stampView(this.px, this.py + EYE, this.pz, this.pitch, this.yaw);
     this.hitstop = 0;
     this.acc = 0;
+    this.selected = 0;
     this.unstuck();
   }
 
@@ -919,10 +1041,15 @@ export class GameEngine {
   async newWorld() {
     this.audio.unlock();
     this.campaign = false;
+    this.mode = "sandbox";
     this.planet = "verdant";
     this.stage = "intro";
+    this.inv = starterInv();
+    this.hotbarIds = [...HOTBAR];
+    this.questDone = [];
+    this.stats = emptyStats();
     clearSave();
-    useHud.getState().patch({ phase: "loading", loadProgress: 0.05, hasSave: false, campaign: false });
+    useHud.getState().patch({ phase: "loading", loadProgress: 0.05, hasSave: false, campaign: false, mode: "sandbox" });
     this.clearChunks();
     this.world = new World((Math.random() * 1e9) | 0, "verdant");
     await this.world.generate(
@@ -950,6 +1077,9 @@ export class GameEngine {
       planet: "verdant",
       planetName: PLANETS.verdant.name,
       quest: "",
+      mode: "sandbox",
+      hotbar: this.hotbarIds.slice(),
+      inventory: this.inv.slice(),
     });
   }
 
@@ -1031,6 +1161,8 @@ export class GameEngine {
     }
     this.superSaiyan = this.superSaiyan && this.power >= SSJ_POWER;
     this.hideShenron();
+    if (kind !== "storm") this.stats.wished = true;
+    this.noteQuest();
     if (this.campaign && kind !== "storm") {
       const nxt = nextPlanet(this.planet);
       if (this.planet === "aether") {
@@ -1049,7 +1181,7 @@ export class GameEngine {
           /* ignore */
         }
         this.flushSave();
-        useHud.getState().patch({ unlocked: this.unlocked, stage: this.stage, quest: this.questLine() });
+        useHud.getState().patch({ unlocked: this.unlocked, stage: this.stage, ...this.questPatch() });
         return;
       }
     }
@@ -1081,11 +1213,17 @@ export class GameEngine {
     this.storyQ.shift();
     const next = this.storyQ[0];
     if (!next) {
-      if (this.campaign && this.stage === "intro") this.stage = "gather";
+      if (this.campaign && this.stage === "intro") {
+        this.stage = "gather";
+        this.stats.talked = true;
+        const tid = `${this.planet}-talk`;
+        if (!this.questDone.includes(tid)) this.questDone.push(tid);
+      }
       this.input.enabled = true;
       this.setPhase("playing");
       if (!this.campaign) this.toast(this.questLine());
-      useHud.getState().patch({ quest: this.questLine(), stage: this.stage });
+      this.noteQuest();
+      useHud.getState().patch({ ...this.questPatch(), stage: this.stage });
       if (!useHud.getState().isTouch) this.requestLock();
       return;
     }
@@ -1104,6 +1242,10 @@ export class GameEngine {
     this.audio.unlock();
     this.planet = id;
     this.stage = id === "aether" ? "finale" : "gather";
+    this.stats.talked = false;
+    this.stats.wished = false;
+    this.stats.bossDown = false;
+    this.stats.balls = 0;
     useHud.getState().patch({ phase: "loading", loadProgress: 0.05, planet: id, planetName: PLANETS[id].name });
     this.input.enabled = false;
     this.clearChunks();
@@ -1136,6 +1278,8 @@ export class GameEngine {
     const dx = n.x - this.px;
     const dz = n.z - this.pz;
     if (dx * dx + dz * dz > 4.5 * 4.5) return;
+    this.stats.talked = true;
+    this.noteQuest();
     this.openStory(n.lines.map((text) => ({ speaker: n.name, species: n.species, text, portrait: n.portrait })));
   }
 
@@ -1148,8 +1292,65 @@ export class GameEngine {
     useHud.getState().patch({ phase });
   }
 
+  openRules(thenStory: boolean) {
+    try {
+      document.exitPointerLock();
+    } catch {
+      /* ignore */
+    }
+    this.input.enabled = true;
+    this.setPhase("rules");
+    useHud.getState().patch({
+      mode: this.mode,
+      hotbar: this.hotbarIds.slice(),
+      inventory: this.inv.slice(),
+      ...this.questPatch(),
+    });
+    this._rulesThenStory = thenStory;
+  }
+
+  private _rulesThenStory = false;
+
+  acceptRules() {
+    if (this._rulesThenStory && this.mode === "story") {
+      this._rulesThenStory = false;
+      this.openStory(PLANETS[this.planet].intro);
+      return;
+    }
+    this._rulesThenStory = false;
+    this.input.enabled = true;
+    this.setPhase("playing");
+    this.toast(this.questLine());
+    if (!useHud.getState().isTouch) this.requestLock();
+  }
+
+  openPanel(phase: "inventory" | "quests" | "rules") {
+    try {
+      document.exitPointerLock();
+    } catch {
+      /* ignore */
+    }
+    this.hadPointerLock = false;
+    this.input.enabled = true;
+    this.setPhase(phase);
+    useHud.getState().patch(this.questPatch());
+  }
+
+  closePanel() {
+    this.input.enabled = true;
+    this.setPhase("playing");
+    if (!useHud.getState().isTouch) this.requestLock();
+  }
+
+  setHotbarBlock(slot: number, block: number) {
+    if (slot < 0 || slot >= this.hotbarIds.length) return;
+    this.hotbarIds[slot] = block;
+    this.selected = slot;
+    useHud.getState().patch({ hotbar: this.hotbarIds.slice(), selected: slot, inventory: this.inv.slice() });
+  }
+
   selectSlot(i: number) {
-    if (i < 0 || i >= HOTBAR.length) return;
+    if (i < 0 || i >= this.hotbarIds.length) return;
     this.selected = i;
     useHud.getState().patch({ selected: i });
   }
@@ -1173,13 +1374,24 @@ export class GameEngine {
       this.render(dt);
       return;
     }
-    if (phase === "paused" || phase === "wish" || phase === "dead" || phase === "story" || phase === "warp") {
+    if (phase === "paused" || phase === "wish" || phase === "dead" || phase === "story" || phase === "warp" || phase === "inventory" || phase === "quests" || phase === "rules") {
       this.animateWorld(dt);
       this.applyCamera(dt, true);
       this.render(dt);
       const act = this.input.poll();
       if (phase === "paused" && act.pausePressed) this.resume();
       if (phase === "story" && (act.interactPressed || act.punchPressed || act.jumpPressed)) this.advanceStory();
+      if (phase === "rules" && (act.interactPressed || act.jumpPressed || act.punchPressed || act.pausePressed)) this.acceptRules();
+      if (phase === "inventory" || phase === "quests") {
+        if (act.pausePressed) this.closePanel();
+        else if (act.invPressed) phase === "inventory" ? this.closePanel() : this.openPanel("inventory");
+        else if (act.questPressed) phase === "quests" ? this.closePanel() : this.openPanel("quests");
+        else if (act.rulesPressed) this.openPanel("rules");
+      }
+      if (phase === "rules") {
+        if (act.invPressed) this.openPanel("inventory");
+        else if (act.questPressed) this.openPanel("quests");
+      }
       return;
     }
 
@@ -1188,10 +1400,22 @@ export class GameEngine {
       this.pause();
       return;
     }
+    if (act.invPressed) {
+      this.openPanel("inventory");
+      return;
+    }
+    if (act.questPressed) {
+      this.openPanel("quests");
+      return;
+    }
+    if (act.rulesPressed) {
+      this.openPanel("rules");
+      return;
+    }
     if (act.interactPressed) this.talkNearest();
 
-    this.yaw -= act.lookX;
-    this.pitch -= act.lookY;
+    this.yaw -= act.lookX * (act.zoom ? 0.42 : 1);
+    this.pitch -= act.lookY * (act.zoom ? 0.42 : 1);
     const lim = Math.PI / 2 - 0.04;
     if (this.pitch > lim) this.pitch = lim;
     if (this.pitch < -lim) this.pitch = -lim;
@@ -1217,12 +1441,28 @@ export class GameEngine {
 
   private titleCam() {
     const s = this.world.spawn;
-    const t = this.orbitT * 0.18;
-    const r = 26;
-    this.camera.position.set(s.x + Math.cos(t) * r, s.y + 12, s.z + Math.sin(t) * r);
-    this.camera.lookAt(s.x, s.y + 3, s.z);
+    const t = this.orbitT * 0.12;
+    const r = 18;
+    const x = s.x + Math.cos(t) * r;
+    const y = s.y + 8;
+    const z = s.z + Math.sin(t) * r;
+    const dx = s.x - x;
+    const dy = s.y + 1.4 - y;
+    const dz = s.z - z;
+    const dist = Math.hypot(dx, dy, dz) || 1;
+    this.yaw = Math.atan2(-dx, -dz);
+    this.pitch = Math.asin(Math.max(-1, Math.min(1, dy / dist)));
+    this.stampView(x, y, z, this.pitch, this.yaw);
     this.fists.left.visible = false;
     this.fists.right.visible = false;
+  }
+
+  private stampView(x: number, y: number, z: number, pitch: number, yaw: number) {
+    this.camera.position.set(x, y, z);
+    this.camera.quaternion.identity();
+    this.camera.rotation.order = "YXZ";
+    this.camera.rotation.set(pitch, yaw, 0, "YXZ");
+    this.camera.updateMatrixWorld();
   }
 
   private forwardRight() {
@@ -1242,9 +1482,10 @@ export class GameEngine {
   }
 
   private fixed(dt: number, act: ReturnType<Input["poll"]>, edges: boolean) {
-    if (act.hotbar !== null && edges) this.selected = act.hotbar;
+    if (act.hotbar !== null && edges) this.selectSlot(act.hotbar);
     if (act.scroll && edges) {
-      this.selected = (this.selected + act.scroll + HOTBAR.length) % HOTBAR.length;
+      const n = this.hotbarIds.length;
+      this.selected = (this.selected + act.scroll + n) % n;
     }
 
     if (edges && act.ssjPressed) this.toggleSsj();
@@ -1267,7 +1508,9 @@ export class GameEngine {
       this.audio.jump();
     } else if (act.jumpPressed && !this.grounded && !this.flying) {
       this.flying = true;
-      this.toast("Ki-Flug · Blickrichtung");
+      this.stats.flown = true;
+      this.noteQuest();
+      this.toast("Ki-Flug · Geradeaus · Leertaste hoch · Shift runter · Strg schneller");
     }
 
     if (this.flying && this.grounded && this.vy <= 0 && !act.jump) {
@@ -1275,20 +1518,20 @@ export class GameEngine {
     }
 
     if (this.flying) {
-      const look = this.lookDir();
-      let wx = act.moveX * rx + act.moveY * look.x;
-      let wy = act.moveY * look.y;
-      let wz = act.moveX * rz + act.moveY * look.z;
+      let wx = act.moveX * rx + act.moveY * fx;
+      let wy = 0;
+      let wz = act.moveX * rz + act.moveY * fz;
       if (act.jump) wy += 1;
-      if (act.sprint || act.flyDown) wy -= 1;
+      if (act.crouch || act.flyDown) wy -= 1;
       if (wx === 0 && wy === 0 && wz === 0 && touch) wy = -0.38;
       const mag = Math.hypot(wx, wy, wz);
       const hasWish = mag > 1e-4;
+      const boost = act.sprint ? FLY_BOOST : act.crouch ? 0.42 : 1;
       if (hasWish) {
         wx /= mag;
         wy /= mag;
         wz /= mag;
-        const spd = FLY_SPEED * ssj;
+        const spd = FLY_SPEED * ssj * boost;
         const k = 1 - Math.exp(-FLY_ACCEL * dt);
         this.vx += (wx * spd - this.vx) * k;
         this.vy += (wy * spd * 0.92 - this.vy) * k;
@@ -1300,19 +1543,34 @@ export class GameEngine {
         this.vz += (0 - this.vz) * drag * 0.42;
       }
     } else {
-      const spd = (act.sprint ? SPRINT_SPEED : WALK_SPEED) * ssj;
+      const feet = this.world.get(Math.floor(this.px), Math.floor(this.py - 0.08), Math.floor(this.pz));
+      const onIce = feet === ICE;
+      const crouch = act.crouch && this.grounded;
+      let spd = WALK_SPEED * ssj;
+      if (crouch) spd = SNEAK_SPEED * ssj;
+      else if (act.sprint) spd = SPRINT_SPEED * ssj;
+      if (onIce && !crouch) spd *= 1.12;
       const wishX = act.moveX * rx + act.moveY * fx;
       const wishZ = act.moveX * rz + act.moveY * fz;
-      const accel = this.grounded ? WALK_ACCEL : AIR_ACCEL;
+      const accel = this.grounded ? (onIce ? 22 : WALK_ACCEL) : AIR_ACCEL;
       const k = 1 - Math.exp(-accel * dt);
       this.vx += (wishX * spd - this.vx) * k;
       this.vz += (wishZ * spd - this.vz) * k;
       if (!this.flying && !act.jump && this.vy > 4) this.vy *= Math.exp(-9 * dt);
       this.vy -= GRAVITY * dt;
       if (this.grounded && act.moveX === 0 && act.moveY === 0) {
-        const fr = Math.exp(-14 * dt);
+        const fr = Math.exp(-(onIce ? 3.2 : 14) * dt);
         this.vx *= fr;
         this.vz *= fr;
+      }
+      if (crouch && this.grounded) {
+        const nx = this.px + this.vx * dt;
+        const nz = this.pz + this.vz * dt;
+        const here = this.supportY(this.px, this.pz, this.py + 0.25);
+        if (here != null) {
+          if (this.supportY(nx, this.pz, this.py + 0.25) == null) this.vx = 0;
+          if (this.supportY(this.px, nz, this.py + 0.25) == null) this.vz = 0;
+        }
       }
     }
 
@@ -1320,10 +1578,23 @@ export class GameEngine {
     this.moveCollide(dt, act.jump);
     if (this.grounded && falling < -11) {
       this.trauma = Math.min(1, this.trauma + 0.16);
+      this.landDip = 0.22;
       this.burst(this.px, this.py + 0.1, this.pz, 5);
+      rumble(90, 0.35);
+    } else if (this.grounded && falling < -6) {
+      this.landDip = Math.max(this.landDip, 0.1);
     }
 
-    this.wishFov = this.flying ? 94 : act.sprint && this.grounded ? 86 : 78;
+    this.sneaking = !!act.crouch && this.grounded && !this.flying;
+    this.lookSwayX += (act.lookX * 14 - this.lookSwayX) * (1 - Math.exp(-10 * dt));
+    this.lookSwayY += (act.lookY * 14 - this.lookSwayY) * (1 - Math.exp(-10 * dt));
+    this.landDip *= Math.exp(-9 * dt);
+
+    if (act.zoom) this.wishFov = 58;
+    else if (this.flying) this.wishFov = act.sprint ? 84 : 80;
+    else if (this.sneaking) this.wishFov = 76;
+    else if (act.sprint && this.grounded) this.wishFov = 80;
+    else this.wishFov = 78;
 
     if (this.py < -8) {
       this.hurt(25, "Absturz");
@@ -1332,8 +1603,6 @@ export class GameEngine {
       this.pz = this.world.spawn.z;
       this.vx = this.vy = this.vz = 0;
     }
-
-    this.kiCd = Math.max(0, this.kiCd - dt);
 
     this.kiCd = Math.max(0, this.kiCd - dt);
     this.punchCd = Math.max(0, this.punchCd - dt);
@@ -1383,13 +1652,13 @@ export class GameEngine {
       this.mineT = 0;
       this.mineKey = "";
     }
-    if (edges && act.placePressed && this.placeCd <= 0) this.placeBlock();
+    if (act.place && this.placeCd <= 0) this.placeBlock();
 
     this.updateBlasts(dt);
     this.updateEnemies(dt);
     this.updateDebris(dt);
     this.updateOrbs(dt);
-    this.collectBalls();
+    if (this.mode !== "creative") this.collectBalls();
 
     const moving = Math.hypot(this.vx, this.vz) > 1.2 && this.grounded && !this.flying;
     if (moving) {
@@ -1523,10 +1792,7 @@ export class GameEngine {
       this.vy += 9 * sdt * steps;
       if (this.vy > 2.4) this.vy = 2.4;
       if (swimUp) {
-        const d = this.lookDir();
-        this.vx += d.x * 16 * dt;
-        this.vy = Math.max(this.vy, 5.6 + Math.max(0, d.y) * 4);
-        this.vz += d.z * 16 * dt;
+        this.vy = Math.max(this.vy, 5.8);
       }
     }
     if (this.world.get(wx, Math.floor(this.py + 0.2), wz) === LAVA && this.invuln <= 0) {
@@ -1535,7 +1801,7 @@ export class GameEngine {
   }
 
   private eye() {
-    return { x: this.px, y: this.py + EYE, z: this.pz };
+    return { x: this.px, y: this.py + EYE - (this.sneaking ? 0.38 : 0), z: this.pz };
   }
 
   private aimHit() {
@@ -1548,6 +1814,7 @@ export class GameEngine {
     this.punchCd = 0.28;
     this.punchT = 0.22;
     this.audio.punch();
+    rumble(70, 0.45);
     const e = this.nearestEnemy(2.6);
     if (e && e.alive) {
       const dmg = (18 + this.power / 400) * (this.superSaiyan ? 1.8 : 1) * (1 + this.combo * 0.08);
@@ -1572,6 +1839,7 @@ export class GameEngine {
     this.vy = d.y * spd * (this.flying ? 0.88 : 0.55);
     this.vz = d.z * spd;
     this.audio.dash();
+    rumble(110, 0.55);
     this.trauma = Math.min(1, this.trauma + 0.16);
     this.burst(this.px, this.py + 0.8, this.pz, 7);
   }
@@ -1595,7 +1863,7 @@ export class GameEngine {
       this.mineKey = "";
       return;
     }
-    this.mineT += dt * (this.superSaiyan ? 1.85 : 1);
+    this.mineT += dt * (this.superSaiyan ? 1.85 : 1) * (this.mode === "creative" ? 4 : 1);
     if (this.mineT >= hard) {
       this.breakBlock(hit.x, hit.y, hit.z, hit.block);
       this.mineT = 0;
@@ -1606,14 +1874,19 @@ export class GameEngine {
   private placeBlock() {
     const hit = this.aimHit();
     if (!hit) return;
-    const id = HOTBAR[this.selected]!;
+    const id = this.hotbarIds[this.selected] ?? 0;
+    if (!id) return;
+    if (this.mode !== "creative") {
+      const have = this.inv[id] ?? 0;
+      if (have <= 0) {
+        this.toast("Kein Block · I Inventar");
+        return;
+      }
+    }
     const x = hit.x + hit.nx;
     const y = hit.y + hit.ny;
     const z = hit.z + hit.nz;
     if (this.world.get(x, y, z) !== AIR) return;
-    if (aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H)) {
-      /* still check new block vs player */
-    }
     const px = this.px,
       py = this.py,
       pz = this.pz;
@@ -1628,8 +1901,16 @@ export class GameEngine {
     this.world.set(x, y, z, id);
     this.edits.push([x, y, z, id]);
     this.rebuildAt(x, y, z);
-    this.placeCd = 0.16;
+    this.placeCd = PLACE_DELAY;
     this.audio.place();
+    if (this.mode !== "creative") {
+      this.inv[id] = Math.max(0, (this.inv[id] ?? 0) - 1);
+    }
+    this.stats.placed += 1;
+    const rise = y - Math.floor(this.world.spawn.y);
+    if (rise > this.stats.tower) this.stats.tower = rise;
+    if (isSacred(id)) this.stats.temple += 1;
+    this.noteQuest();
   }
 
   private breakBlock(x: number, y: number, z: number, block: number) {
@@ -1638,12 +1919,19 @@ export class GameEngine {
     this.edits.push([x, y, z, AIR]);
     this.rebuildAt(x, y, z);
     this.audio.break();
+    rumble(50, 0.28);
     this.burst(x + 0.5, y + 0.5, z + 0.5, 8);
     if (block === KI) {
       this.power += 55;
       this.toast("Ki-Kristall absorbiert");
     }
+    if (block > 0 && block !== WATER && block !== LAVA && block !== BEDROCK) {
+      this.inv[block] = Math.min(INV_STACK, (this.inv[block] ?? 0) + 1);
+      this.stats.mined += 1;
+      this.stats.types = countTypes(this.inv);
+    }
     this.trauma = Math.min(1, this.trauma + 0.08);
+    this.noteQuest();
   }
 
   private fireKi(charge: number) {
@@ -1819,14 +2107,17 @@ export class GameEngine {
       this.hitstop = 0.07;
       this.spawnOrb(e.x, e.y + 0.7, e.z, 28 + (e.kind === "flyer" ? 14 : 0));
       if (e.kind === "shooter") this.spawnOrb(e.x + 0.3, e.y + 0.9, e.z, 18);
+      this.stats.kills += 1;
+      this.noteQuest();
       if (e.boss && this.campaign) {
         if (!this.bossDown.includes(this.planet)) this.bossDown.push(this.planet);
+        this.stats.bossDown = true;
         this.toast(`${e.name ?? "Fürst"} fällt`);
         const got = this.world.balls.filter((b) => b.taken).length;
         if (got >= BALL_COUNT) this.openWish();
         else {
           this.stage = "gather";
-          useHud.getState().patch({ quest: this.questLine(), stage: this.stage });
+          useHud.getState().patch({ ...this.questPatch(), stage: this.stage });
         }
       }
     }
@@ -1976,6 +2267,7 @@ export class GameEngine {
   }
 
   private hurt(n: number, src: string) {
+    if (this.mode === "creative") return;
     if (this.invuln > 0) return;
     const taken = n * (this.superSaiyan ? 0.65 : 1);
     this.health -= taken;
@@ -2010,7 +2302,9 @@ export class GameEngine {
         this.audio.collect();
         this.toast(`${b.stars}-Sterne-Kugel`);
         const got = this.world.balls.filter((x) => x.taken).length;
-        useHud.getState().patch({ quest: this.questLine(), ballsGot: got });
+        this.stats.balls = got;
+        this.noteQuest();
+        useHud.getState().patch({ ...this.questPatch(), ballsGot: got });
         if (got >= BALL_COUNT) {
           if (this.campaign) {
             const bossAlive = this.enemies.some((e) => e.boss && e.alive);
@@ -2196,18 +2490,35 @@ export class GameEngine {
   private applyCamera(dt: number, paused: boolean) {
     this.trauma = Math.max(0, this.trauma - dt * 1.7);
     const shake = this.trauma * this.trauma;
-    const ox = (Math.random() - 0.5) * shake * 0.28;
-    const oy = (Math.random() - 0.5) * shake * 0.28;
-    const bobY = this.grounded && !this.flying ? Math.sin(this.bob) * 0.055 : 0;
-    const bobX = this.grounded && !this.flying ? Math.cos(this.bob * 0.5) * 0.018 : 0;
-    this.camera.position.set(this.px + ox + bobX, this.py + EYE + oy + bobY, this.pz);
-    this.camera.rotation.order = "YXZ";
-    this.camera.rotation.y = this.yaw;
-    this.camera.rotation.x = this.pitch;
-    this.camera.fov += (this.wishFov - this.camera.fov) * (1 - Math.exp(-8 * dt));
+    const ox = shake > 0.002 ? Math.sin(this.orbitT * 37.1) * shake * 0.1 : 0;
+    const oy = shake > 0.002 ? Math.cos(this.orbitT * 41.7) * shake * 0.08 : 0;
+    const targetEye = EYE - (this.sneaking ? 0.38 : 0);
+    this.eyeLerp += (targetEye - this.eyeLerp) * (1 - Math.exp(-16 * dt));
+    const bobAmp = this.grounded && !this.flying && !paused ? 0.022 : 0;
+    const bobY = Math.sin(this.bob) * bobAmp;
+    const bobX = this.grounded && !this.flying && !paused ? Math.cos(this.bob * 0.5) * 0.008 : 0;
+    this.stampView(
+      this.px + ox + bobX,
+      this.py + this.eyeLerp - this.landDip + oy + bobY,
+      this.pz,
+      this.pitch,
+      this.yaw,
+    );
+    this.camera.fov += (this.wishFov - this.camera.fov) * (1 - Math.exp(-7 * dt));
     this.camera.updateProjectionMatrix();
 
-    poseViewArms(this.fists, this.punchT, this.charge, this.bob, this.grounded, this.flying, this.superSaiyan);
+    poseViewArms(
+      this.fists,
+      this.punchT,
+      this.charge,
+      this.bob,
+      this.grounded,
+      this.flying,
+      this.superSaiyan,
+      this.lookSwayX,
+      this.lookSwayY,
+      this.sneaking,
+    );
     this.fists.left.visible = true;
     this.fists.right.visible = true;
     this.auraLight.intensity = this.superSaiyan ? 3.2 : this.charge * 2.6;
@@ -2276,11 +2587,14 @@ export class GameEngine {
       mining,
       dashReady: this.dashCd <= 0 && this.energy >= 16,
       combo: this.combo,
-      quest: this.questLine(),
+      ...this.questPatch(),
       planet: this.planet,
       planetName: PLANETS[this.planet].name,
       stage: this.stage,
       campaign: this.campaign,
+      mode: this.mode,
+      hotbar: this.hotbarIds.slice(),
+      inventory: this.inv.slice(),
       npcHint: this.world.npcs.some((n) => {
         const dx = n.x - this.px;
         const dz = n.z - this.pz;
@@ -2323,6 +2637,11 @@ export class GameEngine {
       stage: this.stage,
       unlocked: this.unlocked,
       bossDown: this.bossDown,
+      mode: this.mode,
+      inventory: this.inv.slice(),
+      hotbar: this.hotbarIds.slice(),
+      questDone: this.questDone.slice(),
+      stats: { ...this.stats },
     };
     writeSave(data);
     useHud.getState().patch({ hasSave: true });
@@ -2339,9 +2658,15 @@ export class GameEngine {
   private wireControlsTest() {
     window.__controlsTest = {
       getYaw: () => this.yaw,
+      getPitch: () => this.pitch,
       getSpeed: () => Math.hypot(this.vx, this.vz),
+      getVel: () => ({ x: this.vx, y: this.vy, z: this.vz }),
       getPos: () => ({ x: this.px, y: this.py, z: this.pz }),
       getPhase: () => useHud.getState().phase,
+      getMode: () => this.mode,
+      getInv: () => this.inv.slice(),
+      getQuest: () => this.questView(),
+      openPanel: (p: "inventory" | "quests" | "rules") => this.openPanel(p),
       getBalls: () =>
         this.world.balls.map((b) => ({
           x: b.x,
@@ -2504,7 +2829,9 @@ declare global {
   interface Window {
     __controlsTest?: {
       getYaw: () => number;
+      getPitch?: () => number;
       getSpeed: () => number;
+      getVel?: () => { x: number; y: number; z: number };
       getPos: () => { x: number; y: number; z: number };
       getPhase?: () => string;
       getBalls?: () => { x: number; y: number; z: number; stars: number; taken: boolean }[];
@@ -2514,6 +2841,10 @@ declare global {
       mineNow?: () => { x: number; y: number; z: number; block: number } | null;
       placeNow?: () => [number, number, number, number] | null;
       takeAllBalls?: () => string;
+      getMode?: () => string;
+      getInv?: () => number[];
+      getQuest?: () => { title: string; value: number; target: number };
+      openPanel?: (p: "inventory" | "quests" | "rules") => void;
     };
   }
 }

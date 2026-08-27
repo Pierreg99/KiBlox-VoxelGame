@@ -77,13 +77,35 @@ export const BLOCK_HARDNESS: Record<number, number> = {
 };
 
 export const HOTBAR = [GRASS, DIRT, STONE, WOOD, KI] as const;
+export const CREATIVE_HOTBAR = [GRASS, DIRT, STONE, WOOD, KI, TEMPLE, METAL, ICE, BASALT] as const;
+export const PLACEABLE = [
+  GRASS,
+  DIRT,
+  STONE,
+  SAND,
+  WOOD,
+  LEAVES,
+  KI,
+  MOSS,
+  TEMPLE,
+  CLAY,
+  CLOUD,
+  PATH,
+  SNOW,
+  ICE,
+  METAL,
+  BASALT,
+] as const;
+export const INV_STACK = 99;
 
 export const PLAYER_HW = 0.32;
 export const PLAYER_H = 1.72;
 export const EYE = 1.52;
 export const WALK_SPEED = 6.9;
+export const SNEAK_SPEED = 2.15;
 export const SPRINT_SPEED = 11.2;
 export const FLY_SPEED = 20;
+export const FLY_BOOST = 1.55;
 export const SSJ_MUL = 1.75;
 export const JUMP_VEL = 9.1;
 export const GRAVITY = 28;
@@ -91,6 +113,7 @@ export const WALK_ACCEL = 80;
 export const AIR_ACCEL = 22;
 export const FLY_ACCEL = 26;
 export const FLY_DRAG = 7;
+export const PLACE_DELAY = 0.2;
 export const COYOTE_TIME = 0.16;
 export const JUMP_BUFFER = 0.14;
 export const STEP_HEIGHT = 1.08;
@@ -103,5 +126,5 @@ export const REACH = 6.8;
 export const BALL_COUNT = 7;
 export const SEA_LEVEL = 16;
 
-export const SAVE_KEY = "kiblox-save-v5";
-export const SAVE_VERSION = 5;
+export const SAVE_KEY = "kiblox-save-v6";
+export const SAVE_VERSION = 6;

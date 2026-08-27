@@ -2,16 +2,19 @@
 
 Letzte Aktualisierung: 2026-08-27.
 
-Das Spiel ist **spielbar**. v0.5.1: Orbit-Saga, Fall-Fix, Minecraft-Humanoids mit Ki-Animation.
+Das Spiel ist **spielbar**. v0.6.0: Inventar, Kampagne / Kreativ / Freies Spiel, Aufgaben + Regeln + Fortschritt.
 
 ## Status
 
 | Bereich | Stand |
 |---------|-------|
 | Titel / Laden / Pause / Tod / Wunsch | Fertig |
+| Drei Modi + Regeln-Overlay | Fertig |
+| Inventar + Hotbar-Zählung | Fertig |
+| Aufgaben / Quest-Log / Progress | Fertig |
 | Voxel-Welt + Chunk-Meshing | Fertig |
 | FPS-Bewegung, Ki-Flug Blick, Snap, Step-up, Void-Rescue | Fertig |
-| localStorage Save v5 | Fertig |
+| localStorage Save v6 | Fertig |
 | Bauen / Abbauen, Hotbar Desktop + Touch | Fertig |
 | Ki-Kampf, Dash, Super Saiyan | Fertig |
 | Drachenkugeln + Orryx-Wünsche | Fertig |
@@ -20,6 +23,7 @@ Das Spiel ist **spielbar**. v0.5.1: Orbit-Saga, Fall-Fix, Minecraft-Humanoids mi
 | Touch-Sticks + Gamepad | Fertig |
 | Auth / DB / Multiplayer | Aus, absichtlich |
 | Tests (Playwright-Smoke intern) | Manuell + Smoke, keine CI-Matrix |
+
 
 ## Geschafft
 

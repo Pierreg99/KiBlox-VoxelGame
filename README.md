@@ -12,19 +12,23 @@ Five worlds, six peoples, seven orbs, one wish-serpent.
 
 ![Titel](docs/title.png)
 
-**Kampagne · Bauen · Fliegen · Ki · Orryx**
+**Kampagne · Kreativ · Freies Spiel · Inventar · Aufgaben**
 
 ![Im Spiel](docs/play.png)
 
 ## Spielen
 
-Fortschritt lokal (`localStorage`, Schlüssel `kiblox-save-v5`). Kein Account.
+Fortschritt lokal (`localStorage`, Schlüssel `kiblox-save-v6`). Kein Account.
 
 Quellcode: [github.com/Pierreg99/KIBlockx](https://github.com/Pierreg99/KIBlockx)
 
 | | |
 |---|---|
 | **Kampagne** | Orbit-Saga: Verdant → Terra → Cinder → Rime → Aether |
+| **Kreativ** | Unendliche Blöcke, kein Schaden, Bau-Aufgaben |
+| **Freies Spiel** | Kugeln, Kampf und Bau ohne Kampagnen-Tor |
+| **Inventar** | Abbauen füllt den Beutel, Setzen verbraucht. I öffnet das Raster |
+| **Aufgaben** | Fortschritt und Regeln je Modus. J Log, H Regeln |
 | **Völker** | Solari, Veldari, Cryon, Automata, Thrynn, Aetheri — blocky Humanoids, Walk/Fly |
 | **Kampf** | Schlag, geladener Ki-Stoß, Dash, Super Saiyan ab 4500 Ki |
 | **Welt** | 128×80×128 Blöcke, Inseln, Tempel, Bosse |
@@ -36,18 +40,24 @@ Quellcode: [github.com/Pierreg99/KIBlockx](https://github.com/Pierreg99/KIBlockx
 
 | Taste | Aktion |
 |-------|--------|
-| WASD | Laufen (W vor, A links, D rechts — FPS-Strafe) |
+| WASD | W vor, A links, D rechts, S zurück — am Boden und im Flug geradeaus |
+| Shift | Schleichen · Kante halten · im Flug sinken |
+| Strg / W doppelt | Sprinten · im Flug schneller |
+| Z | Zoomen (Scouter) |
 | Maus | Umsehen (Klick sperrt den Pointer) |
 | Leertaste | Springen · in der Luft nochmal: Ki-Flug |
 | Flug + Leertaste | Steigen |
 | Flug + Shift / Strg | Sinken |
 | E | Mit NPC reden |
+| I | Inventar |
+| J / Tab | Aufgaben |
+| H | Regeln |
 | Linksklick halten | Abbauen / schlagen |
 | Rechtsklick | Block setzen |
 | Q halten, loslassen | Geladener Ki-Stoß |
 | R | Dash |
 | F | Super Saiyan |
-| 1–5 / Mausrad | Hotbar |
+| 1–9 / Mausrad | Hotbar |
 | ESC | Pause |
 
 **Touch:** Stick links, Blick rechts, Rede / Flug / Ki unten.
