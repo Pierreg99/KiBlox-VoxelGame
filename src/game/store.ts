@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { BALL_COUNT, HOTBAR, MAX_ENERGY, MAX_HEALTH, START_POWER } from "./constants";
+import type { PlanetId, Stage } from "./campaign";
 
-export type Phase = "title" | "loading" | "playing" | "paused" | "wish" | "dead";
+export type Phase = "title" | "loading" | "playing" | "paused" | "wish" | "dead" | "story" | "warp";
 
 export type RadarBlip = { id: number; angle: number; dist: number; stars: number };
 
@@ -32,6 +33,17 @@ export type HudState = {
   mining: number;
   dashReady: boolean;
   combo: number;
+  campaign: boolean;
+  planet: PlanetId;
+  planetName: string;
+  stage: Stage;
+  quest: string;
+  storySpeaker: string;
+  storyText: string;
+  storyPortrait: string;
+  lookName: string | null;
+  unlocked: PlanetId[];
+  npcHint: boolean;
 };
 
 const initial: HudState = {
@@ -61,6 +73,17 @@ const initial: HudState = {
   mining: 0,
   dashReady: true,
   combo: 0,
+  campaign: false,
+  planet: "verdant",
+  planetName: "Verdant",
+  stage: "intro",
+  quest: "",
+  storySpeaker: "",
+  storyText: "",
+  storyPortrait: "",
+  lookName: null,
+  unlocked: ["verdant"],
+  npcHint: false,
 };
 
 export const useHud = create<HudState & { patch: (p: Partial<HudState>) => void }>((set) => ({

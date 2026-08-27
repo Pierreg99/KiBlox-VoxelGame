@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 — 2026-08-27
+
+- Orbit-Saga: five original worlds (Verdant, Terra, Cinder, Rime, Aether)
+- Species: Solari, Veldari, Cryon, Automata, Thrynn, Aetheri
+- Story, bosses, star-gate travel, Orryx wishes
+- New blocks: snow, ice, lava, metal, basalt
+- Scouter shows species name + power
+
 ## 0.4.1 — 2026-08-27
 
 - World actually draws after Spielen (direct renderer, no bloom pass that went black)

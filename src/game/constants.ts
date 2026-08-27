@@ -21,8 +21,13 @@ export const TEMPLE = 11;
 export const CLAY = 12;
 export const CLOUD = 13;
 export const PATH = 14;
+export const SNOW = 15;
+export const ICE = 16;
+export const LAVA = 17;
+export const METAL = 18;
+export const BASALT = 19;
 
-export const BLOCK_COUNT = 15;
+export const BLOCK_COUNT = 20;
 
 export const BLOCK_NAMES: Record<number, string> = {
   [AIR]: "Luft",
@@ -40,6 +45,11 @@ export const BLOCK_NAMES: Record<number, string> = {
   [CLAY]: "Lehm",
   [CLOUD]: "Wolkenflaum",
   [PATH]: "Pfad",
+  [SNOW]: "Schnee",
+  [ICE]: "Eis",
+  [LAVA]: "Lava",
+  [METAL]: "Metall",
+  [BASALT]: "Basalt",
 };
 
 /** Seconds to mine while holding the strike button. */
@@ -59,6 +69,11 @@ export const BLOCK_HARDNESS: Record<number, number> = {
   [CLAY]: 0.22,
   [CLOUD]: 0.12,
   [PATH]: 0.2,
+  [SNOW]: 0.16,
+  [ICE]: 0.55,
+  [LAVA]: 0,
+  [METAL]: 1.1,
+  [BASALT]: 0.82,
 };
 
 export const HOTBAR = [GRASS, DIRT, STONE, WOOD, KI] as const;
@@ -88,5 +103,5 @@ export const REACH = 6.8;
 export const BALL_COUNT = 7;
 export const SEA_LEVEL = 16;
 
-export const SAVE_KEY = "kiblox-save-v4";
-export const SAVE_VERSION = 4;
+export const SAVE_KEY = "kiblox-save-v5";
+export const SAVE_VERSION = 5;

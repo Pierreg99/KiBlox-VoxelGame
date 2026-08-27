@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { AIR, CHUNK, CLOUD, KI, LEAVES, SX, SY, SZ, WATER } from "./constants";
-import { ATLAS_COLS, TILE_SIZE, faceTile } from "./textures";
+import { ATLAS_COLS, ATLAS_ROWS, TILE_SIZE, faceTile } from "./textures";
 import type { World } from "./world";
 
 const DIRS: [number, number, number][] = [
@@ -69,8 +69,10 @@ function tileUv(tile: number, u: number, v: number): [number, number] {
   const col = tile % ATLAS_COLS;
   const row = Math.floor(tile / ATLAS_COLS);
   const su = 1 / ATLAS_COLS;
-  const inset = 0.5 / TILE_SIZE / ATLAS_COLS + 0.001;
-  return [col * su + inset + u * (su - inset * 2), 1 - (row * su + inset + (1 - v) * (su - inset * 2))];
+  const sv = 1 / ATLAS_ROWS;
+  const insetU = 0.5 / TILE_SIZE / ATLAS_COLS + 0.001;
+  const insetV = 0.5 / TILE_SIZE / ATLAS_ROWS + 0.001;
+  return [col * su + insetU + u * (su - insetU * 2), 1 - (row * sv + insetV + (1 - v) * (sv - insetV * 2))];
 }
 
 function vertexAO(

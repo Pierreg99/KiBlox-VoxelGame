@@ -10,9 +10,11 @@ import {
   Hammer,
   Box,
   FastForward,
+  MessageCircle,
 } from "lucide-react";
 import type { GameEngine } from "@/game/engine";
 import { DIRT, GRASS, KI, SSJ_POWER, STONE, WOOD } from "@/game/constants";
+import { PLANET_ORDER, PLANETS } from "@/game/campaign";
 import { useHud } from "@/game/store";
 
 export function GameApp() {
@@ -83,6 +85,8 @@ function Hud({
       {hud.phase === "title" && <TitleOverlay engine={e} />}
       {hud.phase === "paused" && <PauseOverlay engine={e} />}
       {hud.phase === "wish" && <WishOverlay engine={e} />}
+      {hud.phase === "story" && <StoryOverlay engine={e} />}
+      {hud.phase === "warp" && <WarpOverlay engine={e} />}
       {hud.phase === "dead" && <DeadOverlay engine={e} />}
     </>
   );
@@ -106,6 +110,7 @@ function PlayHud({ engineRef }: { engineRef: RefObject<GameEngine | null> }) {
             </div>
             {hud.lookPower != null && (
               <p className="mt-1 text-xs text-muted">
+                {hud.lookName ? <span className="text-fg">{hud.lookName} · </span> : null}
                 Ziel: <span className="hud-num text-fg">{hud.lookPower.toLocaleString("de-DE")}</span>
               </p>
             )}
@@ -141,6 +146,14 @@ function PlayHud({ engineRef }: { engineRef: RefObject<GameEngine | null> }) {
         </div>
         <DragonRadar />
       </div>
+      {hud.campaign && hud.quest && (
+        <div className="absolute top-4 left-1/2 z-20 w-[min(90vw,22rem)] -translate-x-1/2 sm:top-6">
+          <p className="rounded-lg bg-surface/85 px-3 py-1.5 text-center text-xs text-fg ring-1 ring-border">
+            {hud.quest}
+            {hud.npcHint ? " · E reden" : ""}
+          </p>
+        </div>
+      )}
 
       <div className="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
         <div className="relative flex size-12 items-center justify-center">
@@ -306,24 +319,31 @@ function TitleOverlay({
       />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,var(--color-bg)_0%,transparent_52%)] sm:bg-[linear-gradient(to_top,color-mix(in_oklab,var(--color-bg)_78%,transparent)_0%,transparent_58%)]" />
       <div className="relative w-full max-w-md rounded-xl bg-surface/80 p-5 shadow-panel ring-1 ring-border backdrop-blur-sm sm:p-8">
-        <p className="text-xs font-medium tracking-[0.22em] text-muted uppercase">Namek · Erde · Orbit</p>
+        <p className="text-xs font-medium tracking-[0.22em] text-muted uppercase">Orbit-Saga · Fünf Welten</p>
         <h1 className="font-display mt-1 text-6xl leading-none tracking-wide text-fg sm:text-7xl">
           KI BLOX
         </h1>
-        <p className="mt-2 text-sm text-muted">Baue. Fliege. Lade Ki. Sieben Kugeln. Ein Wunsch.</p>
+        <p className="mt-2 text-sm text-muted">Solari. Cryon. Sieben Kugeln. Ein Wunsch, der Welten öffnet.</p>
         <div className="mt-5 flex flex-col gap-2 sm:mt-6">
           <button
             type="button"
-            onClick={() => engine()?.playFromTitle("continue")}
+            onClick={() => engine()?.playFromTitle(hud.hasSave ? "continue" : "campaign")}
             className="h-12 rounded-lg bg-accent px-5 font-display text-2xl tracking-wide text-accent-fg transition-transform duration-150 hover:brightness-110 active:scale-[0.98]"
           >
-            {hud.hasSave ? "Fortsetzen" : "Spielen"}
+            {hud.hasSave ? "Fortsetzen" : "Kampagne"}
+          </button>
+          <button
+            type="button"
+            onClick={() => engine()?.playFromTitle("campaign")}
+            className="h-11 rounded-lg bg-raised px-5 text-sm font-medium text-fg ring-1 ring-border"
+          >
+            Neue Kampagne
           </button>
           {hud.hasSave && (
             <button
               type="button"
               onClick={() => engine()?.playFromTitle("new")}
-              className="h-11 rounded-lg bg-raised px-5 text-sm font-medium text-fg ring-1 ring-border transition-opacity hover:opacity-90"
+              className="h-11 rounded-lg px-5 text-sm font-medium text-muted hover:text-fg"
             >
               Am Spawn neu starten
             </button>
@@ -333,16 +353,15 @@ function TitleOverlay({
             onClick={() => void engine()?.newWorld()}
             className="h-11 rounded-lg px-5 text-sm font-medium text-muted hover:text-fg"
           >
-            Neue Welt
+            Freies Spiel
           </button>
         </div>
         <p className="mt-4 text-xs leading-relaxed text-subtle sm:hidden">
-          Stick links, Blick rechts. Flug: Blickrichtung. Halten = steigen, loslassen = sinken.
+          Stick links, Blick rechts. E reden. Flug: Blickrichtung.
         </p>
         <ul className="mt-6 hidden space-y-1 text-xs leading-relaxed text-subtle sm:block">
-          <li>WASD bewegen · Maus umsehen · Leertaste springen, in der Luft nochmal: Ki-Flug</li>
-          <li>Flug folgt dem Blick und gleitet aus · Leertaste steigen · Shift/Strg sinken</li>
-          <li>Q halten, loslassen für Ki-Stoß · R Dash · F Super Saiyan · 1–5 Blöcke · ESC Pause</li>
+          <li>WASD bewegen · Maus umsehen · E reden · Leertaste springen, in der Luft: Ki-Flug</li>
+          <li>Q Ki-Stoß · R Dash · F Super Saiyan · 1–5 Blöcke · ESC Pause</li>
         </ul>
       </div>
     </div>
@@ -386,16 +405,85 @@ function PauseOverlay({ engine }: { engine: () => GameEngine | null }) {
 }
 
 function WishOverlay({ engine }: { engine: () => GameEngine | null }) {
+  const campaign = useHud((s) => s.campaign);
   return (
     <div className="absolute inset-0 z-40 flex items-end justify-center bg-bg/55 px-5 pb-10 sm:items-center sm:pb-0">
       <div className="w-full max-w-md rounded-xl bg-surface p-6 shadow-panel ring-1 ring-border">
-        <p className="text-xs tracking-[0.2em] text-muted uppercase">Shenron</p>
+        <p className="text-xs tracking-[0.2em] text-muted uppercase">Orryx</p>
         <h2 className="font-display mt-1 text-4xl leading-none tracking-wide">Sag deinen Wunsch</h2>
         <p className="mt-2 text-sm text-muted">Die sieben Kugeln sind vereint. Wähle weise.</p>
         <div className="mt-5 flex flex-col gap-2">
+          {campaign && (
+            <WishBtn onClick={() => engine()?.grantWish("warp")} label="Das Tor öffnen" hint="Nächste Welt" />
+          )}
           <WishBtn onClick={() => engine()?.grantWish("power")} label="Mehr Kraft" hint="+4000 Ki" />
           <WishBtn onClick={() => engine()?.grantWish("heal")} label="Voller Körper" hint="Leben auffüllen" />
           <WishBtn onClick={() => engine()?.grantWish("storm")} label="Neue Jagd" hint="Kugeln neu verstreuen" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StoryOverlay({ engine }: { engine: () => GameEngine | null }) {
+  const hud = useHud();
+  return (
+    <div className="absolute inset-0 z-40 flex items-end justify-center bg-bg/40 px-5 pb-8 sm:items-center sm:pb-0">
+      <div className="w-full max-w-lg rounded-xl bg-surface/90 p-5 shadow-panel ring-1 ring-border backdrop-blur-sm sm:p-6">
+        <div className="flex gap-4">
+          {hud.storyPortrait ? (
+            <img
+              src={hud.storyPortrait}
+              alt=""
+              className="h-20 w-20 shrink-0 rounded-lg object-cover ring-1 ring-border"
+            />
+          ) : null}
+          <div className="min-w-0">
+            <p className="text-xs tracking-[0.18em] text-muted uppercase">{hud.storySpeaker}</p>
+            <p className="mt-2 text-sm leading-relaxed text-fg">{hud.storyText}</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="relative z-10 mt-4 h-11 w-full rounded-lg bg-accent font-display text-2xl text-accent-fg"
+          onClick={() => engine()?.advanceStory()}
+        >
+          Weiter
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WarpOverlay({ engine }: { engine: () => GameEngine | null }) {
+  const unlocked = useHud((s) => s.unlocked);
+  const current = useHud((s) => s.planet);
+  return (
+    <div className="absolute inset-0 z-40 flex items-center justify-center px-5">
+      <img src="/game/warp.jpg" alt="" className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-50" />
+      <div className="pointer-events-none absolute inset-0 bg-bg/55" />
+      <div className="relative w-full max-w-lg rounded-xl bg-surface/90 p-5 shadow-panel ring-1 ring-border sm:p-6">
+        <p className="text-xs tracking-[0.2em] text-muted uppercase">Sternentor</p>
+        <h2 className="font-display mt-1 text-4xl tracking-wide">Wähle eine Welt</h2>
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {PLANET_ORDER.map((id) => {
+            const p = PLANETS[id];
+            const open = unlocked.includes(id);
+            return (
+              <button
+                key={id}
+                type="button"
+                disabled={!open}
+                onClick={() => void engine()?.travelTo(id)}
+                className={`rounded-lg p-3 text-left ring-1 ring-border ${
+                  id === current ? "bg-raised" : "bg-surface"
+                } disabled:opacity-40`}
+              >
+                <p className="font-display text-2xl leading-none">{p.name}</p>
+                <p className="mt-1 text-xs text-muted">{open ? p.subtitle : "Versiegelt"}</p>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -571,6 +659,11 @@ function TouchPad({ engineRef }: { engineRef: RefObject<GameEngine | null> }) {
               const i = engineRef.current?.input;
               if (i) i.touchJump = false;
             }}
+          />
+          <TouchBtn
+            label="Rede"
+            icon={<MessageCircle className="size-5" />}
+            onDown={() => engineRef.current?.talkNearest()}
           />
         </div>
         <button

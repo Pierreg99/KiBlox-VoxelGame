@@ -2,6 +2,7 @@ import { createNoise2D, createNoise3D } from "simplex-noise";
 import {
   AIR,
   BALL_COUNT,
+  BASALT,
   BEDROCK,
   CHUNK,
   CLAY,
@@ -11,12 +12,16 @@ import {
   CZ,
   DIRT,
   GRASS,
+  ICE,
   KI,
+  LAVA,
   LEAVES,
+  METAL,
   MOSS,
   PATH,
   SAND,
   SEA_LEVEL,
+  SNOW,
   STONE,
   SX,
   SY,
@@ -25,6 +30,7 @@ import {
   WATER,
   WOOD,
 } from "./constants";
+import { PLANETS, pickKind, speciesFor, type PlanetId, type SpeciesId } from "./campaign";
 import { makeRng } from "./rng";
 
 export type DragonBall = {
@@ -36,9 +42,28 @@ export type DragonBall = {
   taken: boolean;
 };
 
-export type EnemyKind = "grunt" | "shooter" | "flyer";
+export type EnemyKind = "grunt" | "shooter" | "flyer" | "brute" | "elite" | "lord";
 
-export type EnemySpawn = { x: number; y: number; z: number; power: number; kind: EnemyKind };
+export type EnemySpawn = {
+  x: number;
+  y: number;
+  z: number;
+  power: number;
+  kind: EnemyKind;
+  species: SpeciesId;
+  name?: string;
+  boss?: boolean;
+};
+
+export type NpcSpawn = {
+  x: number;
+  y: number;
+  z: number;
+  name: string;
+  species: SpeciesId;
+  portrait: string;
+  lines: string[];
+};
 
 function idx(x: number, y: number, z: number) {
   return x + z * SX + y * SX * SZ;
@@ -89,12 +114,15 @@ function yieldThread() {
 export class World {
   data: Uint8Array;
   seed: number;
+  planet: PlanetId;
   spawn = { x: SX / 2 + 0.5, y: 30, z: SZ / 2 + 0.5 };
   balls: DragonBall[] = [];
   enemies: EnemySpawn[] = [];
+  npcs: NpcSpawn[] = [];
 
-  constructor(seed: number) {
+  constructor(seed: number, planet: PlanetId = "verdant") {
     this.seed = seed;
+    this.planet = planet;
     this.data = new Uint8Array(SX * SY * SZ);
   }
 
@@ -115,15 +143,21 @@ export class World {
 
   isSolid(x: number, y: number, z: number) {
     const b = this.get(x, y, z);
-    return b !== AIR && b !== LEAVES && b !== WATER;
+    return b !== AIR && b !== LEAVES && b !== WATER && b !== LAVA;
   }
 
   isOpaque(x: number, y: number, z: number) {
     const b = this.get(x, y, z);
-    return b !== AIR && b !== LEAVES && b !== WATER && b !== CLOUD;
+    return b !== AIR && b !== LEAVES && b !== WATER && b !== CLOUD && b !== LAVA;
+  }
+
+  isLiquid(x: number, y: number, z: number) {
+    const b = this.get(x, y, z);
+    return b === WATER || b === LAVA;
   }
 
   async generate(onProgress?: (p: number) => void, aborted?: () => boolean) {
+    const P = PLANETS[this.planet];
     const rngT = makeRng(this.seed, 0x11);
     const rngC = makeRng(this.seed, 0x22);
     const rngE = makeRng(this.seed, 0x33);
@@ -154,7 +188,7 @@ export class World {
         const dx = (x - cx0) / (SX * 0.52);
         const dz = (z - cz0) / (SZ * 0.52);
         const radial = Math.hypot(dx, dz);
-        const island = 1 - smooth01((radial - 0.7) / 0.4);
+        const island = 1 - smooth01((radial - P.islandR) / 0.4);
         let elev = eRaw * 0.52 + ridge2 * 0.48;
         elev = Math.pow(elev, 1.18) * (0.38 + 0.62 * island);
         let h = 8 + elev * 44;
@@ -241,15 +275,18 @@ export class World {
               }
             } else if (rngC() < 0.012) id = KI;
           } else if (y < h - 1) {
-            id = elev > 0.7 ? STONE : DIRT;
+            id = elev > 0.7 ? STONE : P.dirt;
           } else if (y === h) {
-            if (h <= SEA_LEVEL + 1) id = moist > 0.55 ? CLAY : SAND;
-            else if (elev > 0.74) id = STONE;
-            else if (moist > 0.62 && h < SEA_LEVEL + 7) id = MOSS;
-            else if (moist < 0.28) id = SAND;
-            else id = GRASS;
-          } else if (y < h) id = DIRT;
-          if (id === AIR && y <= SEA_LEVEL && y > 0) id = WATER;
+            if (h <= SEA_LEVEL + 1) {
+              if (P.liquid === LAVA) id = BASALT;
+              else if (P.liquid === ICE) id = ICE;
+              else id = moist > 0.55 ? CLAY : SAND;
+            } else if (elev > 0.74) id = this.planet === "cinder" ? BASALT : STONE;
+            else if (moist > 0.62 && h < SEA_LEVEL + 7 && P.surface === GRASS) id = MOSS;
+            else if (moist < 0.28 && P.surface === GRASS) id = SAND;
+            else id = P.surface;
+          } else if (y < h) id = P.dirt;
+          if (id === AIR && y <= SEA_LEVEL && y > 0) id = P.liquid;
           this.data[idx(x, y, z)] = id;
         }
       }
@@ -263,7 +300,7 @@ export class World {
     for (let z = 2; z < SZ - 2; z += 2) {
       for (let x = 2; x < SX - 2; x += 2) {
         const h = height[x + z * SX]!;
-        if (this.get(x, h, z) !== GRASS && this.get(x, h, z) !== MOSS) continue;
+        if (this.get(x, h, z) !== P.surface && this.get(x, h, z) !== MOSS) continue;
         if (this.get(x + 1, SEA_LEVEL, z) === WATER || h <= SEA_LEVEL + 1) {
           if (this.get(x, h - 1, z) === STONE || this.get(x, h - 1, z) === DIRT) {
             this.set(x, h - 1, z, MOSS);
@@ -326,7 +363,7 @@ export class World {
     };
 
     // Umbrella trees
-    for (let i = 0; i < 220; i++) {
+    for (let i = 0; i < P.trees; i++) {
       const x = 4 + ((rngT() * (SX - 8)) | 0);
       const z = 4 + ((rngT() * (SZ - 8)) | 0);
       if (occupied(x, z)) continue;
@@ -360,7 +397,7 @@ export class World {
     }
 
     // Cloud islands
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < P.clouds; i++) {
       const ix = 14 + ((rngI() * (SX - 28)) | 0);
       const iz = 14 + ((rngI() * (SZ - 28)) | 0);
       const iy = 54 + ((rngI() * 10) | 0);
@@ -372,7 +409,7 @@ export class World {
           for (let dy = -2; dy <= drop + 1; dy++) {
             let id = STONE;
             if (dy <= -1) id = CLOUD;
-            else if (dy === drop + 1) id = rngI() < 0.2 ? KI : GRASS;
+            else if (dy === drop + 1) id = rngI() < 0.2 ? KI : P.surface;
             else if (rngI() < 0.12) id = KI;
             this.set(ix + dx, iy + dy, iz + dz, id);
           }
@@ -389,11 +426,11 @@ export class World {
         if (!this.inBounds(xx, 1, zz)) continue;
         for (let y = 1; y < SY - 2; y++) {
           if (y < plazaH) {
-            if (this.get(xx, y, zz) === AIR || this.get(xx, y, zz) === WATER) {
-              this.set(xx, y, zz, y > plazaH - 3 ? DIRT : STONE);
+            if (this.get(xx, y, zz) === AIR || this.get(xx, y, zz) === WATER || this.get(xx, y, zz) === LAVA) {
+              this.set(xx, y, zz, y > plazaH - 3 ? P.dirt : STONE);
             }
           } else if (y === plazaH) {
-            this.set(xx, y, zz, Math.abs(dx) <= 1 || Math.abs(dz) <= 1 ? PATH : GRASS);
+            this.set(xx, y, zz, Math.abs(dx) <= 1 || Math.abs(dz) <= 1 ? PATH : P.surface);
           } else if (y < plazaH + 6) this.set(xx, y, zz, AIR);
         }
         height[xx + zz * SX] = plazaH;
@@ -588,23 +625,60 @@ export class World {
     }
 
     this.enemies = [];
-    for (let i = 0; i < 22; i++) {
+    for (let i = 0; i < 24; i++) {
       const x = 8 + ((rngE() * (SX - 16)) | 0);
       const z = 8 + ((rngE() * (SZ - 16)) | 0);
       const y = height[x + z * SX]! + 1;
       const dx = x - this.spawn.x;
       const dz = z - this.spawn.z;
       if (dx * dx + dz * dz < 16 * 16) continue;
-      const roll = rngE();
-      const kind: EnemyKind = roll > 0.78 ? "flyer" : roll > 0.45 ? "shooter" : "grunt";
+      const kind = pickKind(P.enemyMix, rngE);
+      const species = speciesFor(kind, this.planet);
       this.enemies.push({
         x: x + 0.5,
         y: kind === "flyer" ? y + 4 + rngE() * 6 : y,
         z: z + 0.5,
-        power: 700 + ((rngE() * 1800) | 0) + (kind === "flyer" ? 400 : 0),
+        power: 700 + ((rngE() * 1800) | 0) + (kind === "flyer" ? 400 : kind === "brute" ? 600 : 0),
         kind,
+        species,
       });
     }
+    const by = this.surfaceY(tx, tz);
+    this.enemies.push({
+      x: tx + 0.5,
+      y: P.boss.kind === "flyer" || P.boss.kind === "lord" ? by + 5 : by,
+      z: tz + 0.5,
+      power: P.boss.power,
+      kind: P.boss.kind,
+      species: P.boss.species,
+      name: P.boss.name,
+      boss: true,
+    });
+
+    this.npcs = [
+      {
+        x: this.spawn.x + 1.6,
+        y: this.spawn.y,
+        z: this.spawn.z - 4.5,
+        name: P.npc.name,
+        species: P.npc.species,
+        portrait: P.npc.portrait,
+        lines: P.npc.lines,
+      },
+    ];
+
+    if (P.spikes !== "none") {
+      const block = P.spikes === "ice" ? ICE : BASALT;
+      for (let i = 0; i < 48; i++) {
+        const x = 6 + ((rngI() * (SX - 12)) | 0);
+        const z = 6 + ((rngI() * (SZ - 12)) | 0);
+        const h = height[x + z * SX]!;
+        if (h <= SEA_LEVEL) continue;
+        const tall = 3 + ((rngI() * 7) | 0);
+        for (let dy = 1; dy <= tall; dy++) this.set(x, h + dy, z, dy === tall ? KI : block);
+      }
+    }
+
     onProgress?.(1);
   }
 

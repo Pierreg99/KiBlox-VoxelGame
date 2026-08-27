@@ -1,16 +1,21 @@
 import * as THREE from "three";
 import {
   AIR,
+  BASALT,
   BEDROCK,
   CLAY,
   CLOUD,
   DIRT,
   GRASS,
+  ICE,
   KI,
+  LAVA,
   LEAVES,
+  METAL,
   MOSS,
   PATH,
   SAND,
+  SNOW,
   STONE,
   TEMPLE,
   WATER,
@@ -19,7 +24,9 @@ import {
 
 const TILE = 64;
 const COLS = 4;
-const ATLAS = TILE * COLS;
+const ROWS = 8;
+const ATLAS_W = TILE * COLS;
+const ATLAS_H = TILE * ROWS;
 
 function hash(n: number) {
   n = (n ^ 61) ^ (n >>> 16);
@@ -54,7 +61,7 @@ function setPx(
   b: number,
   a = 255,
 ) {
-  const i = (y * ATLAS + x) * 4;
+  const i = (y * ATLAS_W + x) * 4;
   data[i] = r;
   data[i + 1] = g;
   data[i + 2] = b;
@@ -100,6 +107,11 @@ export const TILE_CLAY = 12;
 export const TILE_CLOUD = 13;
 export const TILE_WOOD_TOP = 14;
 export const TILE_PATH = 15;
+export const TILE_SNOW = 16;
+export const TILE_ICE = 17;
+export const TILE_LAVA = 18;
+export const TILE_METAL = 19;
+export const TILE_BASALT = 20;
 
 export function faceTile(block: number, ny: number): number {
   if (block === GRASS) {
@@ -120,6 +132,11 @@ export function faceTile(block: number, ny: number): number {
   if (block === CLAY) return TILE_CLAY;
   if (block === CLOUD) return TILE_CLOUD;
   if (block === PATH) return TILE_PATH;
+  if (block === SNOW) return TILE_SNOW;
+  if (block === ICE) return TILE_ICE;
+  if (block === LAVA) return TILE_LAVA;
+  if (block === METAL) return TILE_METAL;
+  if (block === BASALT) return TILE_BASALT;
   if (block === AIR) return TILE_STONE;
   return TILE_STONE;
 }
@@ -135,10 +152,10 @@ function styleAtlas(tex: THREE.Texture) {
 
 export function createAtlasTexture(): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
-  canvas.width = ATLAS;
-  canvas.height = ATLAS;
+  canvas.width = ATLAS_W;
+  canvas.height = ATLAS_H;
   const ctx = canvas.getContext("2d")!;
-  const img = ctx.createImageData(ATLAS, ATLAS);
+  const img = ctx.createImageData(ATLAS_W, ATLAS_H);
   const d = img.data;
 
   fillTile(d, TILE_GRASS_TOP, (x, y) => {
@@ -234,6 +251,33 @@ export function createAtlasTexture(): THREE.CanvasTexture {
     const p = hash(x * 21 + y * 53) > 0.9 ? 18 : 0;
     return [clamp255(168 + n * 18 + p), clamp255(132 + n * 14 + p), clamp255(78 + n * 10)];
   });
+  fillTile(d, TILE_SNOW, (x, y) => {
+    const n = noise2(x * 0.4, y * 0.4);
+    const spark = hash(x * 11 + y * 29) > 0.92 ? 30 : 0;
+    return [clamp255(228 + n * 18 + spark), clamp255(236 + n * 14 + spark), clamp255(242 + n * 10)];
+  });
+  fillTile(d, TILE_ICE, (x, y) => {
+    const n = noise2(x * 0.22, y * 0.5);
+    const crack = hash(x * 7 + y * 13) > 0.94 ? -40 : 0;
+    return [clamp255(140 + n * 40 + crack), clamp255(198 + n * 30), clamp255(220 + n * 20)];
+  });
+  fillTile(d, TILE_LAVA, (x, y) => {
+    const n = noise2(x * 0.18, y * 0.18);
+    const crack = noise2(x * 0.55 + 9, y * 0.55) > 0.62;
+    return crack
+      ? [clamp255(220 + n * 30), clamp255(90 + n * 40), 24]
+      : [clamp255(48 + n * 20), clamp255(18 + n * 10), 12];
+  });
+  fillTile(d, TILE_METAL, (x, y) => {
+    const n = noise2(x * 0.3, y * 0.12);
+    const rivet = hash(x * 17 + y * 41) > 0.96 ? 40 : 0;
+    return [clamp255(92 + n * 28 + rivet), clamp255(98 + n * 24 + rivet), clamp255(108 + n * 22)];
+  });
+  fillTile(d, TILE_BASALT, (x, y) => {
+    const n = noise2(x * 0.26, y * 0.26);
+    const pore = hash(x * 23 + y * 19) > 0.88 ? -28 : 0;
+    return [clamp255(42 + n * 18 + pore), clamp255(40 + n * 16 + pore), clamp255(44 + n * 14)];
+  });
 
   ctx.putImageData(img, 0, 0);
   return styleAtlas(new THREE.CanvasTexture(canvas)) as THREE.CanvasTexture;
@@ -294,14 +338,15 @@ export function loadGameTexture(url: string): Promise<THREE.Texture | null> {
 }
 
 export const ATLAS_COLS = COLS;
-export const ATLAS_SIZE = ATLAS;
+export const ATLAS_ROWS = ROWS;
+export const ATLAS_SIZE = ATLAS_W;
 export const TILE_SIZE = TILE;
 
 export function tileUv(tile: number, u: number, v: number, inset = 0.02): [number, number] {
   const col = tile % COLS;
   const row = Math.floor(tile / COLS);
   const su = 1 / COLS;
-  const sv = 1 / COLS;
+  const sv = 1 / ROWS;
   return [
     col * su + inset * su + u * su * (1 - 2 * inset),
     1 - (row * sv + inset * sv + (1 - v) * sv * (1 - 2 * inset)),

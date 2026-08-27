@@ -17,6 +17,7 @@ export type Actions = {
   ssjPressed: boolean;
   dashPressed: boolean;
   pausePressed: boolean;
+  interactPressed: boolean;
   hotbar: number | null;
   scroll: number;
 };
@@ -40,6 +41,7 @@ const EMPTY: Actions = {
   ssjPressed: false,
   dashPressed: false,
   pausePressed: false,
+  interactPressed: false,
   hotbar: null,
   scroll: 0,
 };
@@ -78,6 +80,7 @@ export class Input {
   private ssjEdge = false;
   private dashEdge = false;
   private pauseEdge = false;
+  private interactEdge = false;
   enabled = false;
   private el: HTMLElement;
   private unsub: (() => void)[] = [];
@@ -99,7 +102,7 @@ export class Input {
       if (!this.enabled) return;
       this.keys.add(ev.code);
       if (
-        ["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyF", "KeyR"].includes(
+        ["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyF", "KeyR", "KeyE"].includes(
           ev.code,
         )
       ) {
@@ -108,11 +111,12 @@ export class Input {
       if (ev.code === "KeyF") this.ssjEdge = true;
       if (ev.code === "KeyR") this.dashEdge = true;
       if (ev.code === "Escape" || ev.code === "KeyP") this.pauseEdge = true;
-      if (ev.code === "KeyQ" || ev.code === "KeyE") this.kiEdge = true;
+      if (ev.code === "KeyQ") this.kiEdge = true;
+      if (ev.code === "KeyE") this.interactEdge = true;
     });
     on(window, "keyup", (e) => {
       const code = (e as KeyboardEvent).code;
-      if (code === "KeyQ" || code === "KeyE") this.kiUpEdge = true;
+      if (code === "KeyQ") this.kiUpEdge = true;
       this.keys.delete(code);
     });
     on(window, "blur", () => this.keys.clear());
@@ -281,7 +285,7 @@ export class Input {
     this.placeEdge = false;
     this.touchPlacePressed = false;
 
-    a.ki = this.kiHeld || k.has("KeyQ") || k.has("KeyE") || this.touchKi || a.ki;
+    a.ki = this.kiHeld || k.has("KeyQ") || this.touchKi || a.ki;
     a.kiPressed = this.kiEdge || this.touchKiPressed || a.kiPressed;
     a.kiReleased = this.kiUpEdge || this.touchKiReleased || a.kiReleased;
     this.kiEdge = false;
@@ -299,6 +303,10 @@ export class Input {
 
     a.pausePressed = this.pauseEdge;
     this.pauseEdge = false;
+
+    a.interactPressed = this.interactEdge || this.touchInteractPressed;
+    this.interactEdge = false;
+    this.touchInteractPressed = false;
 
     for (let i = 1; i <= 5; i++) {
       if (k.has(`Digit${i}`) && !this.prevKeys.has(`Digit${i}`)) a.hotbar = i - 1;
@@ -321,6 +329,7 @@ export class Input {
   touchKiReleased = false;
   touchSsjPressed = false;
   touchDashPressed = false;
+  touchInteractPressed = false;
 
   dispose() {
     for (const u of this.unsub) u();

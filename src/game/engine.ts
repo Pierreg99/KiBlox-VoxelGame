@@ -22,6 +22,7 @@ import {
   JUMP_BUFFER,
   JUMP_VEL,
   KI,
+  LAVA,
   LEAVES,
   MAX_ENERGY,
   MAX_HEALTH,
@@ -45,6 +46,17 @@ import {
   WOOD,
 } from "./constants";
 import { GameAudio } from "./audio";
+import {
+  PLANETS,
+  PLANET_ORDER,
+  SPECIES,
+  kindLabel,
+  nextPlanet,
+  type PlanetId,
+  type Stage,
+  type StoryLine,
+} from "./campaign";
+import { hpFor, makeBeing } from "./beings";
 import { Input } from "./input";
 import { meshChunk } from "./mesher";
 import { clearSave, hasSave, loadSave, writeSave, type SaveData } from "./save";
@@ -69,6 +81,9 @@ type Enemy = {
   alive: boolean;
   hop: number;
   kind: EnemyKind;
+  species: import("./campaign").SpeciesId;
+  name?: string;
+  boss?: boolean;
 };
 
 type Blast = {
@@ -131,8 +146,16 @@ export class GameEngine {
   private orbs: Orb[] = [];
   private shenron: THREE.Group | null = null;
   private sun: THREE.DirectionalLight;
+  private hemi: THREE.HemisphereLight;
   private sky: THREE.Mesh;
   private clouds: THREE.Mesh[] = [];
+  private npcMeshes: THREE.Group[] = [];
+  campaign = false;
+  planet: PlanetId = "verdant";
+  stage: Stage = "intro";
+  unlocked: PlanetId[] = ["verdant"];
+  bossDown: PlanetId[] = [];
+  private storyQ: StoryLine[] = [];
   energy = MAX_ENERGY;
   private charge = 0;
   private mineT = 0;
@@ -205,6 +228,7 @@ export class GameEngine {
     this.scene.fog = new THREE.Fog(0x7ed4c4, 42, 128);
 
     const hemi = new THREE.HemisphereLight(0xd8fff4, 0x2a3a24, 1.05);
+    this.hemi = hemi;
     this.scene.add(hemi);
     this.sun = new THREE.DirectionalLight(0xfff1c8, 1.35);
     this.sun.position.set(48, 90, 28);
@@ -318,9 +342,14 @@ export class GameEngine {
 
     const existing = loadSave();
     if (existing) {
-      this.world = new World(existing.seed);
+      this.campaign = existing.campaign;
+      this.planet = existing.planet;
+      this.stage = existing.stage;
+      this.unlocked = existing.unlocked;
+      this.bossDown = existing.bossDown;
+      this.world = new World(existing.seed, existing.planet);
     } else {
-      this.world = new World((Math.random() * 1e9) | 0);
+      this.world = new World((Math.random() * 1e9) | 0, this.planet);
     }
     useHud.getState().patch({ loadProgress: 0.08 });
     await yieldFrame();
@@ -356,6 +385,7 @@ export class GameEngine {
     }
     this.unstuck();
     useHud.getState().patch({ loadProgress: 0.44 });
+    this.applyPlanetLook();
     await this.buildAllChunks();
     if (this.disposed) return;
     this.spawnEntities();
@@ -370,6 +400,12 @@ export class GameEngine {
       superSaiyan: this.superSaiyan,
       ssjReady: this.power >= SSJ_POWER,
       hasSave: hasSave(),
+      campaign: this.campaign,
+      planet: this.planet,
+      planetName: PLANETS[this.planet].name,
+      stage: this.stage,
+      quest: this.questLine(),
+      unlocked: this.unlocked,
     });
     this.beginLoop();
   }
@@ -424,6 +460,32 @@ export class GameEngine {
     this.last = now;
     dt = Math.min(dt, 0.1);
     this.frame(dt);
+  }
+
+  private applyPlanetLook() {
+    const P = PLANETS[this.planet];
+    this.scene.fog = new THREE.Fog(P.fog, 42, 128);
+    this.scene.background = new THREE.Color(P.bg);
+    this.sun.color.setHex(P.sun);
+    this.hemi.color.setHex(P.hemiSky);
+    this.hemi.groundColor.setHex(P.hemiGround);
+    this.renderer.setClearColor(P.bg, 1);
+    void loadGameTexture(P.skyUrl).then((tex) => {
+      if (this.disposed || !tex) return;
+      this.applySkyTex(tex);
+    });
+  }
+
+  private questLine() {
+    if (!this.campaign) return "";
+    const P = PLANETS[this.planet];
+    const got = this.world.balls.filter((b) => b.taken).length;
+    if (this.stage === "intro") return `${P.name} · Sprich mit ${P.npc.name}`;
+    if (this.stage === "gather") return `${P.name} · Kugeln ${got}/7`;
+    if (this.stage === "boss") return `${P.name} · Besiege ${P.boss.name}`;
+    if (this.stage === "warp") return "Das Tor ist offen";
+    if (this.stage === "finale") return "Orryx wartet auf den letzten Wunsch";
+    return "Orbit-Saga beendet";
   }
 
   private rebuildChunk(cx: number, cy: number, cz: number) {
@@ -588,7 +650,30 @@ export class GameEngine {
     }
     this.enemies = [];
     for (const s of this.world.enemies) {
-      this.enemies.push(this.makeEnemy(s.x, s.y, s.z, s.power, s.kind));
+      const e = this.makeEnemy(s.x, s.y, s.z, s.power, s.kind, s.species);
+      e.name = s.name;
+      e.boss = s.boss;
+      this.enemies.push(e);
+    }
+
+    for (const m of this.npcMeshes) {
+      this.scene.remove(m);
+      m.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          const mat = o.material;
+          if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
+          else mat.dispose();
+        }
+      });
+    }
+    this.npcMeshes = [];
+    for (const n of this.world.npcs) {
+      const g = makeBeing("grunt", n.species);
+      g.scale.setScalar(1.12);
+      g.position.set(n.x, n.y, n.z);
+      this.scene.add(g);
+      this.npcMeshes.push(g);
     }
 
     this.clearPool(this.blasts);
@@ -672,43 +757,11 @@ export class GameEngine {
     list.length = 0;
   }
 
-  private makeEnemy(x: number, y: number, z: number, power: number, kind: EnemyKind = "grunt"): Enemy {
-    const g = new THREE.Group();
-    const bodyCol = kind === "flyer" ? 0x3d6a7a : kind === "shooter" ? 0x8a5a2a : 0x4a9a3a;
-    const headCol = kind === "flyer" ? 0x2a4a58 : kind === "shooter" ? 0x6a3a18 : 0x3d7a32;
-    const body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(kind === "flyer" ? 0.24 : 0.28, kind === "flyer" ? 0.4 : 0.55, 4, 8),
-      new THREE.MeshLambertMaterial({ color: bodyCol }),
-    );
-    body.position.y = kind === "flyer" ? 0.55 : 0.7;
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.22, 10, 8),
-      new THREE.MeshLambertMaterial({ color: headCol, emissive: kind === "shooter" ? 0x331800 : 0x000000, emissiveIntensity: kind === "shooter" ? 0.25 : 0 }),
-    );
-    head.position.y = kind === "flyer" ? 1.05 : 1.28;
-    const antG = new THREE.ConeGeometry(0.05, 0.28, 6);
-    antG.rotateX(Math.PI);
-    const ant = new THREE.Mesh(antG, new THREE.MeshLambertMaterial({ color: 0x2a5524 }));
-    ant.position.set(0.08, kind === "flyer" ? 1.28 : 1.52, 0);
-    const eyeL = new THREE.Mesh(
-      new THREE.SphereGeometry(0.05, 6, 6),
-      new THREE.MeshBasicMaterial({ color: kind === "shooter" ? 0xe8b923 : 0x111111 }),
-    );
-    eyeL.position.set(-0.08, kind === "flyer" ? 1.08 : 1.32, 0.16);
-    const eyeR = eyeL.clone();
-    eyeR.position.x = 0.08;
-    g.add(body, head, ant, eyeL, eyeR);
-    if (kind === "flyer") {
-      const wing = new THREE.Mesh(
-        new THREE.BoxGeometry(1.15, 0.06, 0.35),
-        new THREE.MeshLambertMaterial({ color: 0x2a4a52, emissive: 0x113322, emissiveIntensity: 0.2 }),
-      );
-      wing.position.y = 0.7;
-      g.add(wing);
-    }
+  private makeEnemy(x: number, y: number, z: number, power: number, kind: EnemyKind = "grunt", species: import("./campaign").SpeciesId = "cryon"): Enemy {
+    const g = makeBeing(kind, species);
     g.position.set(x, y, z);
     this.scene.add(g);
-    const hp = (kind === "flyer" ? 28 : kind === "shooter" ? 44 : 36) + power / 80;
+    const hp = hpFor(kind, power);
     return {
       mesh: g,
       x,
@@ -725,20 +778,40 @@ export class GameEngine {
       alive: true,
       hop: Math.random() * 1.4,
       kind,
+      species,
     };
   }
 
-  playFromTitle(mode: "new" | "continue") {
+  playFromTitle(mode: "new" | "continue" | "campaign") {
     this.audio.unlock();
     this.requestLock();
     if (mode === "new") {
+      this.campaign = false;
       void this.resetSameWorld();
+      return;
+    }
+    if (mode === "campaign") {
+      this.campaign = true;
+      this.planet = "verdant";
+      this.stage = "intro";
+      this.unlocked = ["verdant"];
+      this.bossDown = [];
+      if (this.world.planet === "verdant" && this.meshed) {
+        this.resetAvatar();
+        for (const b of this.world.balls) b.taken = false;
+        for (const m of this.ballMeshes) m.visible = true;
+        this.invuln = 1.4;
+        this.openStory(PLANETS.verdant.intro);
+        return;
+      }
+      void this.resetSameWorld().then(() => this.openStory(PLANETS.verdant.intro));
       return;
     }
     this.input.enabled = true;
     this.invuln = Math.max(this.invuln, 1.4);
     this.setPhase("playing");
-    this.toast("Sammle die sieben Drachenkugeln");
+    this.toast(this.campaign ? this.questLine() : "Sammle die sieben Drachenkugeln");
+    if (this.campaign && this.stage === "intro") this.openStory(PLANETS[this.planet].intro);
   }
 
   private async resetSameWorld() {
@@ -747,7 +820,7 @@ export class GameEngine {
     this.input.enabled = false;
     const seed = this.world.seed;
     this.clearChunks();
-    this.world = new World(seed);
+    this.world = new World(seed, this.planet);
     await this.world.generate(
       (p) => useHud.getState().patch({ loadProgress: 0.08 + p * 0.4 }),
       () => this.disposed,
@@ -755,13 +828,14 @@ export class GameEngine {
     if (this.disposed) return;
     this.edits = [];
     this.resetAvatar();
+    this.applyPlanetLook();
     await this.buildAllChunks();
     if (this.disposed) return;
     this.spawnEntities();
     this.invuln = 1.4;
     this.input.enabled = true;
     this.setPhase("playing");
-    this.toast("Sammle die sieben Drachenkugeln");
+    this.toast(this.campaign ? this.questLine() : "Sammle die sieben Drachenkugeln");
   }
 
   private resetAvatar() {
@@ -812,10 +886,13 @@ export class GameEngine {
 
   async newWorld() {
     this.audio.unlock();
+    this.campaign = false;
+    this.planet = "verdant";
+    this.stage = "intro";
     clearSave();
-    useHud.getState().patch({ phase: "loading", loadProgress: 0.05, hasSave: false });
+    useHud.getState().patch({ phase: "loading", loadProgress: 0.05, hasSave: false, campaign: false });
     this.clearChunks();
-    this.world = new World((Math.random() * 1e9) | 0);
+    this.world = new World((Math.random() * 1e9) | 0, "verdant");
     await this.world.generate(
       (p) => useHud.getState().patch({ loadProgress: 0.05 + p * 0.4 }),
       () => this.disposed,
@@ -823,6 +900,7 @@ export class GameEngine {
     if (this.disposed) return;
     this.edits = [];
     this.resetAvatar();
+    this.applyPlanetLook();
     await this.buildAllChunks();
     if (this.disposed) return;
     this.spawnEntities();
@@ -837,6 +915,9 @@ export class GameEngine {
       ballsGot: 0,
       superSaiyan: false,
       ssjReady: false,
+      planet: "verdant",
+      planetName: PLANETS.verdant.name,
+      quest: "",
     });
   }
 
@@ -892,7 +973,7 @@ export class GameEngine {
     if (!useHud.getState().isTouch) this.canvas.requestPointerLock();
   }
 
-  grantWish(kind: "power" | "heal" | "storm") {
+  grantWish(kind: "power" | "heal" | "storm" | "warp") {
     this.audio.wish();
     if (kind === "power") {
       this.power += 4000;
@@ -902,7 +983,7 @@ export class GameEngine {
       this.health = MAX_HEALTH;
       this.energy = MAX_ENERGY;
       this.toast("Körper und Geist erneuert");
-    } else {
+    } else if (kind === "storm") {
       this.health = MAX_HEALTH;
       this.energy = MAX_ENERGY;
       this.power += 1200;
@@ -917,11 +998,113 @@ export class GameEngine {
       this.toast("Die Kugeln verteilen sich neu");
     }
     this.superSaiyan = this.superSaiyan && this.power >= SSJ_POWER;
+    this.hideShenron();
+    if (this.campaign && kind !== "storm") {
+      const nxt = nextPlanet(this.planet);
+      if (this.planet === "aether") {
+        this.stage = "done";
+        this.setPhase("playing");
+        this.input.enabled = true;
+        this.toast("Orryx hat gesprochen");
+      } else if (nxt) {
+        if (!this.unlocked.includes(nxt)) this.unlocked.push(nxt);
+        this.stage = "warp";
+        this.setPhase("warp");
+        this.input.enabled = false;
+        try {
+          document.exitPointerLock();
+        } catch {
+          /* ignore */
+        }
+        this.flushSave();
+        useHud.getState().patch({ unlocked: this.unlocked, stage: this.stage, quest: this.questLine() });
+        return;
+      }
+    }
     this.setPhase("playing");
     this.input.enabled = true;
-    this.hideShenron();
     if (!useHud.getState().isTouch) this.canvas.requestPointerLock();
     this.flushSave();
+  }
+
+  openStory(lines: StoryLine[]) {
+    this.storyQ = lines.slice();
+    const first = this.storyQ[0];
+    if (!first) return;
+    try {
+      document.exitPointerLock();
+    } catch {
+      /* ignore */
+    }
+    this.input.enabled = true;
+    this.setPhase("story");
+    useHud.getState().patch({
+      storySpeaker: first.speaker,
+      storyText: first.text,
+      storyPortrait: first.portrait,
+    });
+  }
+
+  advanceStory() {
+    this.storyQ.shift();
+    const next = this.storyQ[0];
+    if (!next) {
+      if (this.campaign && this.stage === "intro") this.stage = "gather";
+      this.input.enabled = true;
+      this.setPhase("playing");
+      if (!this.campaign) this.toast(this.questLine());
+      useHud.getState().patch({ quest: this.questLine(), stage: this.stage });
+      if (!useHud.getState().isTouch) this.requestLock();
+      return;
+    }
+    useHud.getState().patch({
+      storySpeaker: next.speaker,
+      storyText: next.text,
+      storyPortrait: next.portrait,
+    });
+  }
+
+  async travelTo(id: PlanetId) {
+    if (this.campaign && !this.unlocked.includes(id)) {
+      this.toast("Welt noch versiegelt");
+      return;
+    }
+    this.audio.unlock();
+    this.planet = id;
+    this.stage = id === "aether" ? "finale" : "gather";
+    useHud.getState().patch({ phase: "loading", loadProgress: 0.05, planet: id, planetName: PLANETS[id].name });
+    this.input.enabled = false;
+    this.clearChunks();
+    this.world = new World((Math.random() * 1e9) | 0, id);
+    await this.world.generate(
+      (p) => useHud.getState().patch({ loadProgress: 0.08 + p * 0.4 }),
+      () => this.disposed,
+    );
+    if (this.disposed) return;
+    this.edits = [];
+    this.px = this.world.spawn.x;
+    this.py = this.world.spawn.y;
+    this.pz = this.world.spawn.z;
+    this.vx = this.vy = this.vz = 0;
+    this.yaw = 0;
+    this.pitch = -0.22;
+    this.flying = false;
+    this.unstuck();
+    this.applyPlanetLook();
+    await this.buildAllChunks();
+    if (this.disposed) return;
+    this.spawnEntities();
+    this.flushSave();
+    this.openStory(PLANETS[id].intro);
+  }
+
+  talkNearest() {
+    const n = this.world.npcs[0];
+    if (!n) return;
+    const dx = n.x - this.px;
+    const dz = n.z - this.pz;
+    if (dx * dx + dz * dz > 4.5 * 4.5) return;
+    this.openStory(n.lines.map((text) => ({ speaker: n.name, species: n.species, text, portrait: n.portrait })));
   }
 
   setMuted(m: boolean) {
@@ -958,12 +1141,13 @@ export class GameEngine {
       this.render(dt);
       return;
     }
-    if (phase === "paused" || phase === "wish" || phase === "dead") {
+    if (phase === "paused" || phase === "wish" || phase === "dead" || phase === "story" || phase === "warp") {
       this.animateWorld(dt);
       this.applyCamera(dt, true);
       this.render(dt);
       const act = this.input.poll();
       if (phase === "paused" && act.pausePressed) this.resume();
+      if (phase === "story" && (act.interactPressed || act.punchPressed || act.jumpPressed)) this.advanceStory();
       return;
     }
 
@@ -972,6 +1156,7 @@ export class GameEngine {
       this.pause();
       return;
     }
+    if (act.interactPressed) this.talkNearest();
 
     this.yaw -= act.lookX;
     this.pitch -= act.lookY;
@@ -1253,8 +1438,8 @@ export class GameEngine {
     const wx = Math.floor(this.px);
     const wz = Math.floor(this.pz);
     const wet =
-      this.world.get(wx, Math.floor(this.py + 0.2), wz) === WATER ||
-      this.world.get(wx, Math.floor(this.py + 1.05), wz) === WATER;
+      this.world.isLiquid(wx, Math.floor(this.py + 0.2), wz) ||
+      this.world.isLiquid(wx, Math.floor(this.py + 1.05), wz);
     if (wet && !this.flying) {
       this.vx *= 0.86;
       this.vz *= 0.86;
@@ -1267,6 +1452,9 @@ export class GameEngine {
         this.vy = Math.max(this.vy, 5.6 + Math.max(0, d.y) * 4);
         this.vz += d.z * 16 * dt;
       }
+    }
+    if (this.world.get(wx, Math.floor(this.py + 0.2), wz) === LAVA && this.invuln <= 0) {
+      this.hurt(18 * dt, "Lava");
     }
   }
 
@@ -1555,6 +1743,16 @@ export class GameEngine {
       this.hitstop = 0.07;
       this.spawnOrb(e.x, e.y + 0.7, e.z, 28 + (e.kind === "flyer" ? 14 : 0));
       if (e.kind === "shooter") this.spawnOrb(e.x + 0.3, e.y + 0.9, e.z, 18);
+      if (e.boss && this.campaign) {
+        if (!this.bossDown.includes(this.planet)) this.bossDown.push(this.planet);
+        this.toast(`${e.name ?? "Fürst"} fällt`);
+        const got = this.world.balls.filter((b) => b.taken).length;
+        if (got >= BALL_COUNT) this.openWish();
+        else {
+          this.stage = "gather";
+          useHud.getState().patch({ quest: this.questLine(), stage: this.stage });
+        }
+      }
     }
   }
 
@@ -1569,10 +1767,10 @@ export class GameEngine {
       const dist = Math.hypot(dx, dz);
       const body = e.mesh.children[0] as THREE.Mesh | undefined;
       if (body && body.material instanceof THREE.MeshLambertMaterial) {
-        const rest = e.kind === "flyer" ? 0x3d6a7a : e.kind === "shooter" ? 0x8a5a2a : 0x4a9a3a;
+        const rest = SPECIES[e.species]?.body ?? 0x4a9a3a;
         body.material.color.setHex(e.flash > 0 ? 0xf4f1e6 : rest);
       }
-      if (e.kind === "flyer") {
+      if (e.kind === "flyer" || e.kind === "lord") {
         const targetY = this.py + 4.2;
         e.vy = (targetY - e.y) * 1.6;
         const spd = 5.4;
@@ -1584,11 +1782,15 @@ export class GameEngine {
           e.vz *= 0.9;
         }
         if (dist < 2.1 && e.cooldown <= 0 && useHud.getState().phase === "playing") {
-          e.cooldown = 1.15;
-          this.hurt(13 + e.power / 380, "Luftjäger");
+          e.cooldown = e.kind === "lord" ? 0.7 : 1.15;
+          this.hurt(13 + e.power / 380, e.name ?? kindLabel(e.kind, e.species));
+        }
+        if (e.kind === "lord" && dist < 26 && e.cooldown <= 0 && useHud.getState().phase === "playing") {
+          e.cooldown = 1.1;
+          this.enemyKi(e);
         }
         this.moveEntity(e, dt, true);
-      } else if (e.kind === "shooter") {
+      } else if (e.kind === "shooter" || e.kind === "elite") {
         const ideal = 11;
         if (dist < 46 && dist > 0.4) {
           const push = dist < ideal ? -1 : 1;
@@ -1615,7 +1817,7 @@ export class GameEngine {
         }
       } else {
         if (dist < 48 && dist > 1.3) {
-          const spd = 3.8;
+          const spd = e.kind === "brute" ? 5.6 : 3.8;
           e.vx += ((dx / dist) * spd - e.vx) * (1 - Math.exp(-6 * dt));
           e.vz += ((dz / dist) * spd - e.vz) * (1 - Math.exp(-6 * dt));
           if (e.hop <= 0 && this.onGround(e.x, e.y, e.z)) {
@@ -1630,7 +1832,7 @@ export class GameEngine {
         this.moveEntity(e, dt, false);
         if (dist < 1.55 && e.cooldown <= 0 && useHud.getState().phase === "playing") {
           e.cooldown = 1.05;
-          this.hurt(11 + e.power / 400, "Saibaman");
+          this.hurt(11 + e.power / 400, e.name ?? kindLabel(e.kind, e.species));
           const k = 6;
           this.vx -= (dx / (dist || 1)) * k;
           this.vz -= (dz / (dist || 1)) * k;
@@ -1638,8 +1840,8 @@ export class GameEngine {
       }
       e.mesh.position.set(e.x, e.y, e.z);
       e.mesh.rotation.y = Math.atan2(dx, dz);
-      if (e.kind === "flyer") {
-        const wing = e.mesh.children[5] as THREE.Mesh | undefined;
+      if (e.kind === "flyer" || e.kind === "lord") {
+        const wing = e.mesh.getObjectByName("wing") as THREE.Mesh | undefined;
         if (wing) wing.rotation.z = Math.sin(this.orbitT * 14) * 0.18;
       }
     }
@@ -1718,8 +1920,16 @@ export class GameEngine {
         this.audio.collect();
         this.toast(`${b.stars}-Sterne-Kugel`);
         const got = this.world.balls.filter((x) => x.taken).length;
+        useHud.getState().patch({ quest: this.questLine(), ballsGot: got });
         if (got >= BALL_COUNT) {
-          this.openWish();
+          if (this.campaign) {
+            const bossAlive = this.enemies.some((e) => e.boss && e.alive);
+            if (bossAlive) {
+              this.stage = "boss";
+              this.toast(`Besiege ${PLANETS[this.planet].boss.name}`);
+              useHud.getState().patch({ stage: this.stage, quest: this.questLine() });
+            } else this.openWish();
+          } else this.openWish();
         }
       }
     }
@@ -1775,8 +1985,8 @@ export class GameEngine {
       });
       this.shenron = null;
     }
-    this.scene.fog = new THREE.Fog(0x7ed4c4, 42, 128);
-    this.scene.background = new THREE.Color(0x6ec8b8);
+    this.scene.fog = new THREE.Fog(PLANETS[this.planet].fog, 42, 128);
+    this.scene.background = new THREE.Color(PLANETS[this.planet].bg);
   }
 
   private toggleSsj() {
@@ -1955,6 +2165,7 @@ export class GameEngine {
       target: hit ? BLOCK_NAMES[hit.block] ?? null : null,
       radar,
       lookPower: lookE && lookE.alive ? lookE.power | 0 : null,
+      lookName: lookE && lookE.alive ? lookE.name ?? kindLabel(lookE.kind, lookE.species) : null,
       wishReady: got >= BALL_COUNT,
       energy: this.energy,
       maxEnergy: MAX_ENERGY,
@@ -1962,6 +2173,16 @@ export class GameEngine {
       mining,
       dashReady: this.dashCd <= 0 && this.energy >= 16,
       combo: this.combo,
+      quest: this.questLine(),
+      planet: this.planet,
+      planetName: PLANETS[this.planet].name,
+      stage: this.stage,
+      campaign: this.campaign,
+      npcHint: this.world.npcs.some((n) => {
+        const dx = n.x - this.px;
+        const dz = n.z - this.pz;
+        return dx * dx + dz * dz < 4.5 * 4.5;
+      }),
     });
   }
 
@@ -1994,6 +2215,11 @@ export class GameEngine {
       yaw: this.yaw,
       pitch: this.pitch,
       selected: this.selected,
+      planet: this.planet,
+      campaign: this.campaign,
+      stage: this.stage,
+      unlocked: this.unlocked,
+      bossDown: this.bossDown,
     };
     writeSave(data);
     useHud.getState().patch({ hasSave: true });
@@ -2038,7 +2264,7 @@ export class GameEngine {
       },
       mineNow: () => {
         const hit = this.aimHit();
-        if (!hit || hit.block === AIR || hit.block === WATER || hit.block === BEDROCK) return null;
+        if (!hit || hit.block === AIR || hit.block === WATER || hit.block === LAVA || hit.block === BEDROCK) return null;
         this.breakBlock(hit.x, hit.y, hit.z, hit.block);
         return { x: hit.x, y: hit.y, z: hit.z, block: hit.block };
       },

@@ -2,7 +2,7 @@
 
 Letzte Aktualisierung: 2026-08-27.
 
-Das Spiel ist **spielbar**. v0.4.1: Welt rendert nach Spielen, Ladebalken läuft während der Generierung.
+Das Spiel ist **spielbar**. v0.5: Orbit-Saga, fünf Welten, sechs Völker, Story + Bosse.
 
 ## Status
 

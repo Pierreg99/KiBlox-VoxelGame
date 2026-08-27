@@ -2,10 +2,11 @@
 
 Kein Versprechen auf Termine. Reihenfolge = Nutzen fürs Spielgefühl.
 
-## Jetzt spielbar (v0.4)
+## Jetzt spielbar (v0.5)
 
-Singleplayer-Voxel-Loop: bauen, Ki-Flug entlang des Blicks, sieben Kugeln, drei Wünsche.
-Eigene Block-Atlas, Landmarken, Save lokal (`kiblox-save-v4`).
+Orbit-Saga: fünf Welten, sechs Völker, Story, Bosse, Sternentor.
+Singleplayer-Voxel-Loop: bauen, Ki-Flug, sieben Kugeln, Orryx-Wünsche.
+Save lokal (`kiblox-save-v5`).
 
 ## Als Nächstes
 
@@ -21,7 +22,7 @@ Kleine Schritte, die die bestehende Welt besser machen:
 
 ## Danach
 
-- [ ] Zweites Biom (Felswüste / Orbit-Plateau) im gleichen 128er-Maß
+- [x] Zweites Biom (Terra, Cinder, Rime, Aether)
 - [ ] Einfaches Inventar (9 Slots) statt fester Hotbar
 - [ ] Transformationen jenseits Super Saiyan (Kost + Look, kein Skilltree)
 - [ ] Tageszeit / Wetter als Wunsch- oder Welt-Flag
