@@ -7,11 +7,11 @@
   "author": "Pierreg99 / Cryopg.it",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Pierreg99/kiblox.git"
+    "url": "git+https://github.com/Pierreg99/KIBlockx.git"
   },
-  "homepage": "https://github.com/Pierreg99/kiblox",
+  "homepage": "https://github.com/Pierreg99/KIBlockx",
   "bugs": {
-    "url": "https://github.com/Pierreg99/kiblox/issues"
+    "url": "https://github.com/Pierreg99/KIBlockx/issues"
   },
   "sideEffects": false,
   "type": "module",

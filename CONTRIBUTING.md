@@ -6,7 +6,7 @@ als ein neues System.
 ## Setup
 
 ```bash
-git clone https://github.com/Pierreg99/kiblox.git
+git clone https://github.com/Pierreg99/KIBlockx.git
 cd kiblox
 npm install
 npm run dev

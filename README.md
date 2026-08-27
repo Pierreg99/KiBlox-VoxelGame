@@ -21,6 +21,8 @@ Namek-Hügel, schwebende Kristallinseln, sieben Drachenkugeln, ein Drache.
 Fortschritt liegt lokal im Browser (`localStorage`, Schlüssel `kiblox-save-v4`).
 Kein Account, keine Cloud.
 
+Quellcode: [github.com/Pierreg99/KIBlockx](https://github.com/Pierreg99/KIBlockx)
+
 | | |
 |---|---|
 | **Ziel** | Sieben Drachenkugeln finden, Shenron rufen, einen Wunsch wählen |
