@@ -10,7 +10,7 @@ Was „fertig“ für eine spielbare Session heißt. Kein Marketing.
 | Laufen | WASD = FPS-Strafe, kein Fahrzeug |
 | Boden | Kein Versinken in Bedrock, kein Durchfallen durch geschlossene Fläche |
 | Bäume | Blätter tragfähig, Kronen dicht genug zum Stehen |
-| Sprung / Flug | Leertaste springt, in der Luft nochmal = Ki-Flug in Blickrichtung |
+| Sprung / Flug | Leertaste springt, in der Luft nochmal = Ki-Flug geradeaus (Space hoch, Shift runter) |
 | Charaktere | Minecraft-Proportion (32 px / 1.8 m), Ki-Gi, Walk/Fly/Punch |
 | Völker | Solari, Veldari, Cryon, Automata, Thrynn, Aetheri — original |
 | Kampf | Schlag, geladener Ki-Stoß, Dash, SSJ ab 4500 |

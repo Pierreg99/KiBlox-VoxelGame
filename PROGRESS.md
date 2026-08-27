@@ -2,7 +2,7 @@
 
 Letzte Aktualisierung: 2026-08-27.
 
-Das Spiel ist **spielbar**. v0.6.0: Inventar, Kampagne / Kreativ / Freies Spiel, Aufgaben + Regeln + Fortschritt.
+Das Spiel ist **spielbar**. v0.6.4: feste FPS-Kamera (Yaw-Pitch-Rig), Minecraft-Menüs, GitHub.
 
 ## Status
 

@@ -271,7 +271,7 @@ function PlayHud({ engineRef }: { engineRef: RefObject<GameEngine | null> }) {
             <div className="h-full bg-accent" style={{ width: `${hud.mining * 100}%` }} />
           </div>
         )}
-        <div className="pointer-events-auto relative z-30 flex max-w-[95vw] items-end gap-1 overflow-x-auto rounded-xl bg-surface/85 p-2 ring-1 ring-border">
+        <div className="pointer-events-auto relative z-30 flex max-w-[95vw] items-end gap-1 overflow-x-auto bg-surface/85 p-2 mc-cut">
           {hud.hotbar.map((id, i) => (
             <button
               type="button"
@@ -282,8 +282,8 @@ function PlayHud({ engineRef }: { engineRef: RefObject<GameEngine | null> }) {
                 ev.stopPropagation();
                 engineRef.current?.selectSlot(i);
               }}
-              className={`relative flex h-12 w-12 items-center justify-center overflow-visible rounded-md ${
-                i === hud.selected ? "bg-raised ring-1 ring-accent" : "opacity-80"
+              className={`relative flex h-12 w-12 items-center justify-center overflow-visible mc-cut ${
+                i === hud.selected ? "mc-btn-go" : "opacity-80"
               }`}
             >
               <VoxelSwatch id={id} />
@@ -348,19 +348,19 @@ function LoadingOverlay({
 }) {
   return (
     <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-bg">
-      <p className="kb-kicker">Orbit-Saga</p>
-      <p className="font-display mt-2 text-6xl tracking-wide text-fg">KI BLOX</p>
+      <p className="mc-kicker">Orbit-Saga</p>
+      <h1 className="mc-logo mc-logo-sm mt-2">KI BLOX</h1>
       {fail ? (
         <>
-          <p className="mt-3 text-sm text-muted">Die Welt konnte nicht geladen werden.</p>
-          <button type="button" onClick={onRetry} className="kb-primary mt-6 max-w-56">
+          <p className="mt-4 text-sm text-muted">Die Welt konnte nicht geladen werden.</p>
+          <button type="button" onClick={onRetry} className="mc-btn mc-btn-go mt-6 w-56">
             Erneut versuchen
           </button>
         </>
       ) : (
         <>
-          <p className="mt-3 text-sm text-muted">Die Welt nimmt Form an</p>
-          <div className="mt-8 h-1.5 w-56 overflow-hidden rounded-full bg-raised">
+          <p className="mc-splash">Die Insel nimmt Form an</p>
+          <div className="mt-8 h-2 w-64 overflow-hidden border-2 border-ink bg-raised">
             <div className="h-full bg-accent" style={{ width: `${Math.round(progress * 100)}%` }} />
           </div>
           <p className="hud-num mt-2 text-xs text-subtle">{Math.round(progress * 100)}%</p>
@@ -377,39 +377,43 @@ function TitleOverlay({
 }) {
   const hud = useHud();
   return (
-    <div className="absolute inset-0 z-30 flex items-end justify-start sm:items-stretch">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,var(--color-bg)_0%,transparent_46%)]" />
-      <div className="kb-sheet pointer-events-auto relative flex max-h-[100dvh] flex-col justify-end pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:justify-center">
-        <p className="kb-kicker">Orbit-Saga</p>
-        <h1 className="font-display mt-2 text-[4.4rem] leading-[0.86] tracking-wide text-fg sm:text-[5.6rem]">
-          KI
-          <br />
-          BLOX
-        </h1>
-        <span className="kb-rule" />
-        <p className="max-w-[18rem] text-sm leading-relaxed text-muted">
-          Eine Insel. Drei Wege. Bauen, fliegen, die Kugeln holen.
-        </p>
-        <div className="mt-6">
+    <div className="absolute inset-0 z-30">
+      <div className="pointer-events-none absolute inset-0 mc-vignette" />
+      <div className="pointer-events-none scouter-frame" />
+      <div className="pointer-events-none scouter-frame-b" />
+      <p className="pointer-events-none absolute top-5 left-5 text-[11px] tracking-[0.18em] text-muted uppercase">
+        {hud.planetName || "Verdant"} · 0.6.4
+      </p>
+      <p className="pointer-events-none absolute top-5 right-5 text-right font-display text-sm tracking-[0.2em] text-muted">
+        SCOUTER
+      </p>
+
+      <div className="pointer-events-none absolute inset-x-0 top-[16%] flex flex-col items-center px-4">
+        <h1 className="mc-logo">KI BLOX</h1>
+        <p className="mc-splash">Bauen · Fliegen · Die Kugeln holen</p>
+      </div>
+
+      <div className="absolute inset-x-0 bottom-[11%] flex flex-col items-center px-4 pb-[env(safe-area-inset-bottom)]">
+        <div className="mc-stack pointer-events-auto">
           {hud.hasSave && (
-            <button type="button" onClick={() => engine()?.playFromTitle("continue")} className="kb-mode kb-mode-go">
-              <span className="n">00</span> Fortsetzen
+            <button type="button" onClick={() => engine()?.playFromTitle("continue")} className="mc-btn mc-btn-go">
+              Fortsetzen
             </button>
           )}
-          <button type="button" onClick={() => engine()?.playFromTitle("story")} className="kb-mode kb-mode-go">
-            <span className="n">01</span> Kampagne
+          <button type="button" onClick={() => engine()?.playFromTitle("story")} className="mc-btn mc-btn-go">
+            Kampagne
           </button>
-          <button type="button" onClick={() => engine()?.playFromTitle("creative")} className="kb-mode">
-            <span className="n">02</span> Kreativ
+          <button type="button" onClick={() => engine()?.playFromTitle("creative")} className="mc-btn">
+            Kreativ
           </button>
-          <button type="button" onClick={() => engine()?.playFromTitle("sandbox")} className="kb-mode">
-            <span className="n">03</span> Freies Spiel
+          <button type="button" onClick={() => engine()?.playFromTitle("sandbox")} className="mc-btn">
+            Freies Spiel
           </button>
-          <button type="button" onClick={() => void engine()?.newWorld()} className="kb-mode text-muted">
-            <span className="n">—</span> Neue Insel
+          <button type="button" onClick={() => void engine()?.newWorld()} className="mc-btn mc-btn-quiet">
+            Neue Insel
           </button>
         </div>
-        <p className="mt-6 hidden text-[11px] leading-relaxed text-subtle sm:block">
+        <p className="mt-4 hidden text-center text-[11px] tracking-wide text-subtle sm:block">
           W vor · A links · D rechts · Shift schleichen · Strg sprinten · Z zoomen
         </p>
       </div>
@@ -420,30 +424,31 @@ function TitleOverlay({
 function PauseOverlay({ engine }: { engine: () => GameEngine | null }) {
   const muted = useHud((s) => s.muted);
   return (
-    <div className="absolute inset-0 z-40 flex items-stretch justify-start bg-bg/55">
-      <div className="kb-sheet flex flex-col justify-center">
-        <p className="kb-kicker">Halt</p>
-        <h2 className="kb-title">Pause</h2>
-        <span className="kb-rule" />
-        <p className="text-sm text-muted">Die Insel steht still.</p>
-        <div className="mt-6">
-          <button type="button" onClick={() => engine()?.resume()} className="kb-mode kb-mode-go">
-            <span className="n">01</span> Weiter
+    <div className="absolute inset-0 z-40">
+      <div className="pointer-events-none absolute inset-0 bg-bg/45" />
+      <div className="pointer-events-none scouter-frame" />
+      <div className="pointer-events-none scouter-frame-b" />
+      <div className="absolute inset-0 flex flex-col items-center justify-center px-4">
+        <h2 className="mc-logo mc-logo-sm pointer-events-none">PAUSE</h2>
+        <p className="mc-splash pointer-events-none mb-6">Die Insel steht still</p>
+        <div className="mc-stack pointer-events-auto">
+          <button type="button" onClick={() => engine()?.resume()} className="mc-btn mc-btn-go">
+            Weiter
           </button>
-          <button type="button" onClick={() => engine()?.openPanel("inventory")} className="kb-mode">
-            <span className="n">02</span> Inventar
+          <button type="button" onClick={() => engine()?.openPanel("inventory")} className="mc-btn">
+            Inventar
           </button>
-          <button type="button" onClick={() => engine()?.openPanel("quests")} className="kb-mode">
-            <span className="n">03</span> Aufgaben
+          <button type="button" onClick={() => engine()?.openPanel("quests")} className="mc-btn">
+            Aufgaben
           </button>
-          <button type="button" onClick={() => engine()?.openPanel("rules")} className="kb-mode">
-            <span className="n">04</span> Regeln
+          <button type="button" onClick={() => engine()?.openPanel("rules")} className="mc-btn">
+            Regeln
           </button>
-          <button type="button" onClick={() => engine()?.setMuted(!muted)} className="kb-mode">
-            <span className="n">05</span> {muted ? "Ton an" : "Ton aus"}
+          <button type="button" onClick={() => engine()?.setMuted(!muted)} className="mc-btn">
+            {muted ? "Ton an" : "Ton aus"}
           </button>
-          <button type="button" onClick={() => engine()?.goTitle()} className="kb-mode text-muted">
-            <span className="n">—</span> Zum Titel
+          <button type="button" onClick={() => engine()?.goTitle()} className="mc-btn mc-btn-quiet">
+            Zum Titel
           </button>
         </div>
       </div>
@@ -454,12 +459,13 @@ function PauseOverlay({ engine }: { engine: () => GameEngine | null }) {
 function WishOverlay({ engine }: { engine: () => GameEngine | null }) {
   const campaign = useHud((s) => s.campaign);
   return (
-    <div className="absolute inset-0 z-40 flex items-end justify-center bg-bg/75 px-5 pb-10 sm:items-center sm:pb-0">
-      <div className="kb-panel max-w-md">
-        <p className="kb-kicker">Orryx</p>
-        <h2 className="kb-title mt-1">Sag deinen Wunsch</h2>
-        <p className="mt-2 text-sm text-muted">Die sieben Kugeln sind vereint. Wähle weise.</p>
-        <div className="mt-5 flex flex-col gap-2">
+    <div className="absolute inset-0 z-40 flex items-end justify-center bg-bg/60 px-4 pb-10 sm:items-center sm:pb-0">
+      <div className="mc-window max-w-md">
+        <p className="mc-kicker">Orryx</p>
+        <h2 className="mc-title mt-1">Sag deinen Wunsch</h2>
+        <span className="mc-rule" />
+        <p className="text-sm text-muted">Die sieben Kugeln sind vereint. Wähle weise.</p>
+        <div className="mt-4 flex flex-col gap-2">
           {campaign && (
             <WishBtn onClick={() => engine()?.grantWish("warp")} label="Das Tor öffnen" hint="Nächste Welt" />
           )}
@@ -477,29 +483,26 @@ function StoryOverlay({ engine }: { engine: () => GameEngine | null }) {
   const next = () => engine()?.advanceStory();
   return (
     <div
-      className="absolute inset-0 z-40 flex items-end justify-center bg-bg/50 px-5 pb-8 sm:items-center sm:pb-0"
+      className="absolute inset-0 z-40 flex items-end justify-center bg-bg/40 px-4 pb-8 sm:items-end sm:pb-12"
       onClick={next}
     >
-      <div
-        className="kb-panel relative z-10 max-w-lg sm:p-6"
-        onClick={next}
-      >
+      <div className="mc-window relative z-10 max-w-lg" onClick={next}>
         <div className="pointer-events-none flex gap-4">
           {hud.storyPortrait ? (
             <img
               src={hud.storyPortrait}
               alt=""
-              className="h-20 w-20 shrink-0 rounded-lg object-cover ring-1 ring-border"
+              className="mc-cut h-20 w-20 shrink-0 object-cover"
             />
           ) : null}
           <div className="min-w-0">
-            <p className="kb-kicker">{hud.storySpeaker}</p>
+            <p className="mc-kicker">{hud.storySpeaker}</p>
             <p className="mt-2 text-sm leading-relaxed text-fg">{hud.storyText}</p>
           </div>
         </div>
         <button
           type="button"
-          className="kb-primary relative z-20 mt-4"
+          className="mc-btn mc-btn-go relative z-20 mt-4"
           onClick={(e) => {
             e.stopPropagation();
             next();
@@ -516,13 +519,14 @@ function WarpOverlay({ engine }: { engine: () => GameEngine | null }) {
   const unlocked = useHud((s) => s.unlocked);
   const current = useHud((s) => s.planet);
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center px-5">
+    <div className="absolute inset-0 z-40 flex items-center justify-center px-4">
       <img src="/game/warp.jpg" alt="" className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-50" />
       <div className="pointer-events-none absolute inset-0 bg-bg/55" />
-      <div className="kb-panel relative max-w-lg sm:p-6">
-        <p className="kb-kicker">Sternentor</p>
-        <h2 className="kb-title mt-1">Wähle eine Welt</h2>
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="mc-window relative max-w-lg">
+        <p className="mc-kicker">Sternentor</p>
+        <h2 className="mc-title mt-1">Wähle eine Welt</h2>
+        <span className="mc-rule" />
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {PLANET_ORDER.map((id) => {
             const p = PLANETS[id];
             const open = unlocked.includes(id);
@@ -532,9 +536,8 @@ function WarpOverlay({ engine }: { engine: () => GameEngine | null }) {
                 type="button"
                 disabled={!open}
                 onClick={() => void engine()?.travelTo(id)}
-                className={`rounded-lg p-3 text-left ring-1 ring-border ${
-                  id === current ? "bg-raised" : "bg-surface"
-                } disabled:opacity-40`}
+                className={`p-3 text-left ${id === current ? "mc-btn-go" : "mc-btn"} disabled:opacity-40`}
+                style={{ height: "auto", minHeight: "3.25rem", flexDirection: "column", alignItems: "flex-start" }}
               >
                 <p className="font-display text-2xl leading-none">{p.name}</p>
                 <p className="mt-1 text-xs text-muted">{open ? p.subtitle : "Versiegelt"}</p>
@@ -549,29 +552,21 @@ function WarpOverlay({ engine }: { engine: () => GameEngine | null }) {
 
 function WishBtn({ onClick, label, hint }: { onClick: () => void; label: string; hint: string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex h-14 items-center justify-between rounded-sm bg-raised px-4 text-left shadow-[0_0_0_1px_var(--color-border)] transition-transform duration-[var(--motion-quick)] active:scale-[0.98]"
-    >
-      <span className="font-medium">{label}</span>
-      <span className="text-xs text-muted">{hint}</span>
+    <button type="button" onClick={onClick} className="mc-btn" style={{ height: "3.25rem", justifyContent: "space-between", padding: "0 0.9rem" }}>
+      <span>{label}</span>
+      <span className="text-xs tracking-normal text-muted">{hint}</span>
     </button>
   );
 }
 
 function DeadOverlay({ engine }: { engine: () => GameEngine | null }) {
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-bg/75 px-5">
-      <div className="kb-sheet max-h-none h-auto py-10 text-left">
-        <p className="kb-kicker">Niederlage</p>
-        <h2 className="kb-title">Besiegt</h2>
-        <span className="kb-rule" />
-        <p className="text-sm text-muted">Ki bleibt. Der Körper kehrt zum Nest zurück.</p>
-        <button type="button" onClick={() => engine()?.respawn()} className="kb-mode kb-mode-go mt-6">
-          <span className="n">01</span> Wiederbeleben
-        </button>
-      </div>
+    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-bg/70 px-4">
+      <h2 className="mc-logo mc-logo-sm">BESIEGT</h2>
+      <p className="mc-splash mb-6">Ki bleibt. Der Körper kehrt zum Nest zurück.</p>
+      <button type="button" onClick={() => engine()?.respawn()} className="mc-btn mc-btn-go w-56">
+        Wiederbeleben
+      </button>
     </div>
   );
 }
@@ -580,17 +575,17 @@ function InventoryOverlay({ engine }: { engine: () => GameEngine | null }) {
   const hud = useHud();
   const creative = hud.mode === "creative";
   return (
-    <div className="absolute inset-0 z-40 flex items-stretch justify-start bg-bg/50">
-      <div className="kb-sheet">
+    <div className="absolute inset-0 z-40 flex items-center justify-center bg-bg/50 px-4">
+      <div className="mc-window">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="kb-kicker">Beutel</p>
-            <h2 className="kb-title">Inventar</h2>
+            <p className="mc-kicker">Beutel</p>
+            <h2 className="mc-title">Inventar</h2>
           </div>
           <p className="text-xs text-muted">{creative ? "Unendlich" : "Klick setzt in den Slot"}</p>
         </div>
-        <span className="kb-rule" />
-        <div className="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-8">
+        <span className="mc-rule" />
+        <div className="mt-1 grid grid-cols-4 gap-2 sm:grid-cols-8">
           {PLACEABLE.map((id) => {
             const n = hud.inventory[id] ?? 0;
             const shown = creative || n > 0;
@@ -602,9 +597,8 @@ function InventoryOverlay({ engine }: { engine: () => GameEngine | null }) {
                 type="button"
                 title={BLOCK_NAMES[id]}
                 onClick={() => engine()?.setHotbarBlock(hud.selected, id)}
-                className={`flex flex-col items-center gap-1 rounded-lg p-2 ring-1 ${
-                  inBar ? "bg-raised ring-accent" : "bg-raised/60 ring-border"
-                }`}
+                className={`flex flex-col items-center gap-1 p-2 ${inBar ? "mc-btn-go" : "mc-btn"}`}
+                style={{ height: "auto" }}
               >
                 <VoxelSwatch id={id} />
                 <span className="hud-num text-[10px] text-muted">{creative ? "—" : n}</span>
@@ -621,20 +615,17 @@ function InventoryOverlay({ engine }: { engine: () => GameEngine | null }) {
               key={`bar-${i}`}
               type="button"
               onClick={() => engine()?.selectSlot(i)}
-              className={`flex h-11 w-11 items-center justify-center rounded-lg ${
-                i === hud.selected ? "ring-1 ring-accent" : "ring-1 ring-border opacity-70"
+              className={`flex h-11 w-11 items-center justify-center ${
+                i === hud.selected ? "mc-btn-go" : "mc-btn"
               }`}
+              style={{ width: "2.75rem", height: "2.75rem" }}
             >
               <VoxelSwatch id={id} />
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          className="kb-mode kb-mode-go mt-6"
-          onClick={() => engine()?.closePanel()}
-        >
-          <span className="n">01</span> Schließen
+        <button type="button" className="mc-btn mc-btn-go mt-5" onClick={() => engine()?.closePanel()}>
+          Schließen
         </button>
       </div>
     </div>
@@ -645,19 +636,19 @@ function QuestLogOverlay({ engine }: { engine: () => GameEngine | null }) {
   const hud = useHud();
   const meta = MODE_META[hud.mode];
   return (
-    <div className="absolute inset-0 z-40 flex items-stretch justify-start bg-bg/50">
-      <div className="kb-sheet">
-        <p className="kb-kicker">{meta.tag}</p>
-        <h2 className="kb-title">Aufgaben</h2>
-        <span className="kb-rule" />
-        <p className="mt-1 text-sm text-muted">
+    <div className="absolute inset-0 z-40 flex items-center justify-center bg-bg/50 px-4">
+      <div className="mc-window">
+        <p className="mc-kicker">{meta.tag}</p>
+        <h2 className="mc-title">Aufgaben</h2>
+        <span className="mc-rule" />
+        <p className="text-sm text-muted">
           {hud.questDone}/{hud.questTotal} erfüllt
         </p>
-        <ul className="mt-4 max-h-[50vh] space-y-2 overflow-y-auto">
+        <ul className="mt-3 max-h-[50vh] space-y-2 overflow-y-auto">
           {hud.questList.map((q) => {
             const pct = q.target > 0 ? Math.min(100, (q.value / q.target) * 100) : 0;
             return (
-              <li key={q.id} className="border-b border-border py-2">
+              <li key={q.id} className="border-b-2 border-bg py-2">
                 <div className="flex items-center justify-between gap-2">
                   <p className={`text-sm ${q.complete ? "text-muted" : "text-fg"}`}>{q.title}</p>
                   {q.complete ? (
@@ -669,19 +660,15 @@ function QuestLogOverlay({ engine }: { engine: () => GameEngine | null }) {
                   )}
                 </div>
                 <p className="mt-0.5 text-[11px] text-subtle">{q.hint}</p>
-                <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-bg">
-                  <div className={`h-full rounded-full ${q.complete ? "bg-ok" : "bg-accent"}`} style={{ width: `${pct}%` }} />
+                <div className="mt-1.5 h-2 overflow-hidden border border-ink bg-bg">
+                  <div className={`h-full ${q.complete ? "bg-ok" : "bg-accent"}`} style={{ width: `${pct}%` }} />
                 </div>
               </li>
             );
           })}
         </ul>
-        <button
-          type="button"
-          className="kb-mode kb-mode-go mt-6"
-          onClick={() => engine()?.closePanel()}
-        >
-          <span className="n">01</span> Schließen
+        <button type="button" className="mc-btn mc-btn-go mt-5" onClick={() => engine()?.closePanel()}>
+          Schließen
         </button>
       </div>
     </div>
@@ -692,25 +679,21 @@ function RulesOverlay({ engine }: { engine: () => GameEngine | null }) {
   const hud = useHud();
   const meta = MODE_META[hud.mode];
   return (
-    <div className="absolute inset-0 z-40 flex items-stretch justify-start bg-bg/50">
-      <div className="kb-sheet">
-        <p className="kb-kicker">{meta.tag}</p>
-        <h2 className="kb-title">{meta.name}</h2>
-        <span className="kb-rule" />
-        <p className="mt-2 text-sm text-muted">{meta.blurb}</p>
-        <ul className="mt-4 space-y-2">
+    <div className="absolute inset-0 z-40 flex items-center justify-center bg-bg/50 px-4">
+      <div className="mc-window">
+        <p className="mc-kicker">{meta.tag}</p>
+        <h2 className="mc-title">{meta.name}</h2>
+        <span className="mc-rule" />
+        <p className="text-sm text-muted">{meta.blurb}</p>
+        <ul className="mt-3 space-y-2">
           {meta.rules.map((line) => (
-            <li key={line} className="border-b border-border py-2 text-sm text-fg">
+            <li key={line} className="border-b-2 border-bg py-2 text-sm text-fg">
               {line}
             </li>
           ))}
         </ul>
-        <button
-          type="button"
-          className="kb-mode kb-mode-go mt-6"
-          onClick={() => engine()?.acceptRules()}
-        >
-          <span className="n">01</span> Verstanden
+        <button type="button" className="mc-btn mc-btn-go mt-5" onClick={() => engine()?.acceptRules()}>
+          Verstanden
         </button>
       </div>
     </div>
@@ -731,7 +714,7 @@ function HudIconBtn({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="flex h-11 w-11 items-center justify-center rounded-lg bg-surface/85 text-fg ring-1 ring-border"
+      className="mc-cut flex h-11 w-11 items-center justify-center bg-surface/85 text-fg"
     >
       {icon}
     </button>

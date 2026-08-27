@@ -294,9 +294,9 @@ export class Input {
         const st = radial(gp.axes[0] ?? 0, gp.axes[1] ?? 0);
         mx += st.x;
         my -= st.y;
-        const look = radial(gp.axes[2] ?? 0, gp.axes[3] ?? 0, 0.18);
-        a.lookX += look.x * 0.04;
-        a.lookY += look.y * 0.04;
+        const look = radial(gp.axes[2] ?? 0, gp.axes[3] ?? 0, 0.28);
+        a.lookX += look.x * 0.032;
+        a.lookY += look.y * 0.032;
         if (gp.buttons[0]?.pressed) a.jump = true;
         if (gp.buttons[0]?.pressed && !this.prevPadA) a.jumpPressed = true;
         if (gp.buttons[4]?.pressed) a.crouch = true;

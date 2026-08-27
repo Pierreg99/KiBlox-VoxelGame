@@ -145,6 +145,9 @@ export class GameEngine {
   renderer: THREE.WebGLRenderer;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(78, 1, 0.05, 220);
+  private yawNode = new THREE.Object3D();
+  private pitchNode = new THREE.Object3D();
+  private readonly _skyPos = new THREE.Vector3();
   input: Input;
   audio = new GameAudio();
   world: World;
@@ -235,6 +238,7 @@ export class GameEngine {
   private onLock: () => void;
   private vis: () => void;
   private hadPointerLock = false;
+  private lookSettle = 0;
   canvas: HTMLCanvasElement;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -290,7 +294,12 @@ export class GameEngine {
     this.fists.right.visible = false;
     this.camera.add(this.fists.left);
     this.camera.add(this.fists.right);
-    this.scene.add(this.camera);
+
+    this.yawNode.name = "fps-yaw";
+    this.pitchNode.name = "fps-pitch";
+    this.yawNode.add(this.pitchNode);
+    this.pitchNode.add(this.camera);
+    this.scene.add(this.yawNode);
 
     this.auraLight = new THREE.PointLight(0xe8b923, 0, 16, 2);
     this.camera.add(this.auraLight);
@@ -304,6 +313,11 @@ export class GameEngine {
     this.onResize = () => this.resize();
     this.onLock = () => {
       const locked = document.pointerLockElement === canvas;
+      if (locked) {
+        this.input.mouseDx = 0;
+        this.input.mouseDy = 0;
+        this.lookSettle = 0.18;
+      }
       if (
         !locked &&
         this.hadPointerLock &&
@@ -984,6 +998,7 @@ export class GameEngine {
     this.sneaking = false;
     this.wishFov = 78;
     this.camera.fov = 78;
+    this.camera.updateProjectionMatrix();
     this.stampView(this.px, this.py + EYE, this.pz, this.pitch, this.yaw);
     this.hitstop = 0;
     this.acc = 0;
@@ -1032,6 +1047,9 @@ export class GameEngine {
 
   private requestLock() {
     if (useHud.getState().isTouch) return;
+    this.input.mouseDx = 0;
+    this.input.mouseDy = 0;
+    this.lookSettle = 0.18;
     const p = this.canvas.requestPointerLock({ unadjustedMovement: true } as PointerLockOptions);
     if (p && typeof (p as Promise<void>).catch === "function") {
       (p as Promise<void>).catch(() => this.canvas.requestPointerLock());
@@ -1396,6 +1414,13 @@ export class GameEngine {
     }
 
     const act = this.input.poll();
+    if (this.lookSettle > 0) {
+      this.lookSettle -= dt;
+      act.lookX = 0;
+      act.lookY = 0;
+      this.input.mouseDx = 0;
+      this.input.mouseDy = 0;
+    }
     if (act.pausePressed) {
       this.pause();
       return;
@@ -1441,28 +1466,33 @@ export class GameEngine {
 
   private titleCam() {
     const s = this.world.spawn;
-    const t = this.orbitT * 0.12;
-    const r = 18;
-    const x = s.x + Math.cos(t) * r;
-    const y = s.y + 8;
-    const z = s.z + Math.sin(t) * r;
+    const x = s.x - 14;
+    const y = s.y + 7.2;
+    const z = s.z + 11;
     const dx = s.x - x;
-    const dy = s.y + 1.4 - y;
+    const dy = s.y + 1.15 - y;
     const dz = s.z - z;
     const dist = Math.hypot(dx, dy, dz) || 1;
-    this.yaw = Math.atan2(-dx, -dz);
-    this.pitch = Math.asin(Math.max(-1, Math.min(1, dy / dist)));
-    this.stampView(x, y, z, this.pitch, this.yaw);
+    const yaw = Math.atan2(-dx, -dz);
+    const pitch = Math.asin(Math.max(-1, Math.min(1, dy / dist)));
+    this.stampView(x, y, z, pitch, yaw);
+    if (Math.abs(this.camera.fov - 68) > 0.05) {
+      this.camera.fov = 68;
+      this.camera.updateProjectionMatrix();
+    }
     this.fists.left.visible = false;
     this.fists.right.visible = false;
   }
 
   private stampView(x: number, y: number, z: number, pitch: number, yaw: number) {
-    this.camera.position.set(x, y, z);
+    this.yawNode.position.set(x, y, z);
+    this.yawNode.rotation.set(0, yaw, 0);
+    this.pitchNode.position.set(0, 0, 0);
+    this.pitchNode.rotation.set(pitch, 0, 0);
+    this.camera.position.set(0, 0, 0);
     this.camera.quaternion.identity();
-    this.camera.rotation.order = "YXZ";
-    this.camera.rotation.set(pitch, yaw, 0, "YXZ");
-    this.camera.updateMatrixWorld();
+    this.camera.rotation.set(0, 0, 0);
+    this.yawNode.updateMatrixWorld(true);
   }
 
   private forwardRight() {
@@ -1590,11 +1620,7 @@ export class GameEngine {
     this.lookSwayY += (act.lookY * 14 - this.lookSwayY) * (1 - Math.exp(-10 * dt));
     this.landDip *= Math.exp(-9 * dt);
 
-    if (act.zoom) this.wishFov = 58;
-    else if (this.flying) this.wishFov = act.sprint ? 84 : 80;
-    else if (this.sneaking) this.wishFov = 76;
-    else if (act.sprint && this.grounded) this.wishFov = 80;
-    else this.wishFov = 78;
+    this.wishFov = act.zoom ? 58 : 78;
 
     if (this.py < -8) {
       this.hurt(25, "Absturz");
@@ -2489,22 +2515,9 @@ export class GameEngine {
 
   private applyCamera(dt: number, paused: boolean) {
     this.trauma = Math.max(0, this.trauma - dt * 1.7);
-    const shake = this.trauma * this.trauma;
-    const ox = shake > 0.002 ? Math.sin(this.orbitT * 37.1) * shake * 0.1 : 0;
-    const oy = shake > 0.002 ? Math.cos(this.orbitT * 41.7) * shake * 0.08 : 0;
-    const targetEye = EYE - (this.sneaking ? 0.38 : 0);
-    this.eyeLerp += (targetEye - this.eyeLerp) * (1 - Math.exp(-16 * dt));
-    const bobAmp = this.grounded && !this.flying && !paused ? 0.022 : 0;
-    const bobY = Math.sin(this.bob) * bobAmp;
-    const bobX = this.grounded && !this.flying && !paused ? Math.cos(this.bob * 0.5) * 0.008 : 0;
-    this.stampView(
-      this.px + ox + bobX,
-      this.py + this.eyeLerp - this.landDip + oy + bobY,
-      this.pz,
-      this.pitch,
-      this.yaw,
-    );
-    this.camera.fov += (this.wishFov - this.camera.fov) * (1 - Math.exp(-7 * dt));
+    const eye = EYE - (this.sneaking ? 0.38 : 0);
+    this.stampView(this.px, this.py + eye - this.landDip, this.pz, this.pitch, this.yaw);
+    this.camera.fov += (this.wishFov - this.camera.fov) * (1 - Math.exp(-12 * dt));
     this.camera.updateProjectionMatrix();
 
     poseViewArms(
@@ -2535,7 +2548,6 @@ export class GameEngine {
     } else {
       this.highlight.visible = false;
     }
-    void dt;
   }
 
   private updateHud(dt: number) {
@@ -2604,7 +2616,8 @@ export class GameEngine {
   }
 
   private render(_dt: number) {
-    this.sky.position.copy(this.camera.position);
+    this.camera.getWorldPosition(this._skyPos);
+    this.sky.position.copy(this._skyPos);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -2692,6 +2705,15 @@ export class GameEngine {
         this.yaw = yaw;
         this.pitch = Math.max(-1.4, Math.min(1.4, pitch));
       },
+      getCam: () => ({
+        yaw: this.yawNode.rotation.y,
+        pitch: this.pitchNode.rotation.x,
+        camLocalX: this.camera.rotation.x,
+        camLocalY: this.camera.rotation.y,
+        camLocalZ: this.camera.rotation.z,
+        parented: this.camera.parent === this.pitchNode,
+        orbiting: false,
+      }),
       mineNow: () => {
         const hit = this.aimHit();
         if (!hit || hit.block === AIR || hit.block === WATER || hit.block === LAVA || hit.block === BEDROCK) return null;
@@ -2845,6 +2867,15 @@ declare global {
       getInv?: () => number[];
       getQuest?: () => { title: string; value: number; target: number };
       openPanel?: (p: "inventory" | "quests" | "rules") => void;
+      getCam?: () => {
+        yaw: number;
+        pitch: number;
+        camLocalX: number;
+        camLocalY: number;
+        camLocalZ: number;
+        parented: boolean;
+        orbiting: boolean;
+      };
     };
   }
 }

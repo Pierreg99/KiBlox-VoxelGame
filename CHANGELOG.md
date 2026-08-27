@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.4 — 2026-08-27
+
+- Camera: dedicated FPS yaw/pitch rig (camera is a child, local rotation always identity). Title shot is locked — no orbit, no lookAt, player yaw is not overwritten
+- Play view does not bob or shake the head; FOV only changes on zoom (Z)
+- Menus: Minecraft slab buttons over the live island, extruded KI BLOX wordmark, scouter corner brackets. No left editorial sheet, no numbered SaaS list
+- Pause / Inventar / Aufgaben / Regeln use the same beveled window chrome
+
 ## 0.6.3 — 2026-08-27
 
 - Camera: FPS yaw/pitch rig only (no lookAt leftover from title), stable eye lerp, quieter bob/shake, tighter FOV
