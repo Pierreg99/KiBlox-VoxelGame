@@ -75,6 +75,7 @@ import {
   chainFor,
   completeReady,
   countTypes,
+  creativeInv,
   describeQuest,
   emptyStats,
   isCloud,
@@ -83,7 +84,20 @@ import {
   type GameMode,
   type QuestStats,
 } from "./quests";
-import { hpFor, makeBeing, makeViewArms, poseBeing, poseViewArms } from "./beings";
+import { hpFor, makeBeing, makeViewArms, poseBeing, poseViewArms, setViewWeapon, type AttackAnim } from "./beings";
+import {
+  BEAN,
+  CANNON,
+  FIST,
+  ITEM_NAMES,
+  PICK,
+  STAFF,
+  SWORD,
+  VIAL,
+  isConsumable,
+  isWeapon,
+  weaponOf,
+} from "./items";
 import { Input, rumble } from "./input";
 import { meshChunk } from "./mesher";
 import { clearSave, hasSave, loadSave, writeSave, type SaveData } from "./save";
@@ -222,6 +236,10 @@ export class GameEngine {
   selected = 0;
   edits: [number, number, number, number][] = [];
   private punchT = 0;
+  private attackAnim: AttackAnim = "jab";
+  private attackDur = 0.22;
+  private comboHit = 0;
+  private slamCd = 0;
   private kiCd = 0;
   private punchCd = 0;
   private placeCd = 0;
@@ -951,7 +969,7 @@ export class GameEngine {
       this.mode = "creative";
       this.planet = "verdant";
       this.stage = "intro";
-      this.inv = starterInv();
+      this.inv = creativeInv();
       this.hotbarIds = [...CREATIVE_HOTBAR];
       this.questDone = [];
       this.stats = emptyStats();
@@ -1026,6 +1044,10 @@ export class GameEngine {
     this.mineT = 0;
     this.mineKey = "";
     this.punchT = 0;
+    this.attackAnim = "jab";
+    this.attackDur = 0.22;
+    this.comboHit = 0;
+    this.slamCd = 0;
     this.trauma = 0;
     this.eyeLerp = EYE;
     this.landDip = 0;
@@ -1676,6 +1698,7 @@ export class GameEngine {
     this.invuln = Math.max(0, this.invuln - dt);
     this.punchT = Math.max(0, this.punchT - dt);
     this.dashCd = Math.max(0, this.dashCd - dt);
+    this.slamCd = Math.max(0, this.slamCd - dt);
     this.comboT = Math.max(0, this.comboT - dt);
     if (this.comboT <= 0) this.combo = 0;
 
@@ -1703,24 +1726,31 @@ export class GameEngine {
     if (edges && act.kiReleased) {
       if (this.charge > 0.02) {
         const shot = this.charge < 0.18 ? 0.45 : this.charge;
-        this.fireKi(shot);
+        if (shot >= 0.72) this.fireDisc(shot);
+        else this.fireKi(shot);
       }
       this.charge = 0;
     } else if (!act.ki) {
       this.charge = 0;
     }
 
+    const held = this.heldId();
+    if (edges && act.slamPressed) this.doSlam();
+    if (edges && act.barragePressed) this.doBarrage();
     if (edges && act.punchPressed && this.punchCd <= 0) {
-      const e = this.nearestEnemy(2.6);
-      if (e && e.alive) this.doPunch();
-      else this.mineT = 0;
+      if (this.flying && this.pitch < -0.55) this.doSlam();
+      else this.doStrike(false);
     }
     if (act.punch && this.punchT <= 0) this.tickMine(dt);
     else if (!act.punch) {
       this.mineT = 0;
       this.mineKey = "";
     }
-    if (act.place && this.placeCd <= 0) this.placeBlock();
+    if (act.place && this.placeCd <= 0) {
+      if (isWeapon(held)) this.doStrike(true);
+      else if (isConsumable(held)) this.useItem(held);
+      else this.placeBlock();
+    }
 
     this.updateBlasts(dt);
     this.updateEnemies(dt);
@@ -1878,21 +1908,170 @@ export class GameEngine {
     return raycastVoxels(this.world, e.x, e.y, e.z, d.x, d.y, d.z, REACH);
   }
 
-  private doPunch() {
-    this.punchCd = this.story() ? 0.38 : 0.28;
-    this.punchT = 0.22;
-    this.audio.punch();
-    rumble(70, 0.45);
-    const e = this.nearestEnemy(this.story() ? 2.05 : 2.6);
-    if (e && e.alive) {
-      const dmg =
-        (this.story() ? 12 + this.power / 560 : 18 + this.power / 400) *
-        (this.superSaiyan ? 1.55 : 1) *
-        (1 + this.combo * (this.story() ? 0.045 : 0.08));
-      this.damageEnemy(e, dmg, this.story() ? 3.6 : 5.5);
-      this.trauma = Math.min(1, this.trauma + 0.22);
-      this.hitstop = 0.045;
+  private heldId() {
+    return this.hotbarIds[this.selected] ?? FIST;
+  }
+
+  private nearestLandmark() {
+    let name = PLANETS[this.planet].name;
+    let best = 1e9;
+    for (const l of this.world.landmarks) {
+      const d = Math.hypot(l.x - this.px, l.z - this.pz);
+      if (d < best) {
+        best = d;
+        name = l.name;
+      }
     }
+    return name;
+  }
+
+  private doStrike(heavy: boolean) {
+    if (this.punchCd > 0) return;
+    const id = isWeapon(this.heldId()) ? this.heldId() : FIST;
+    const st = weaponOf(id);
+    const dur = (heavy ? st.speed * 1.35 : st.speed) * (this.superSaiyan ? 0.82 : 1);
+    this.punchCd = dur;
+    this.attackDur = dur;
+    this.punchT = dur;
+    if (heavy) this.comboHit = 0;
+    else this.comboHit = this.comboT > 0 ? (this.comboHit + 1) % 3 : 0;
+    this.attackAnim =
+      id === SWORD
+        ? heavy
+          ? "smash"
+          : this.comboHit === 0
+            ? "slash"
+            : this.comboHit === 1
+              ? "thrust"
+              : "smash"
+        : id === STAFF
+          ? heavy
+            ? "smash"
+            : this.comboHit === 2
+              ? "slash"
+              : "thrust"
+          : id === PICK
+            ? heavy
+              ? "smash"
+              : "slash"
+            : id === CANNON
+              ? heavy
+                ? "beam"
+                : "thrust"
+              : heavy
+                ? "smash"
+                : this.comboHit === 0
+                  ? "jab"
+                  : this.comboHit === 1
+                    ? "hook"
+                    : "upper";
+    if (id === SWORD || id === STAFF) this.audio.slash();
+    else this.audio.punch();
+    rumble(heavy ? 110 : 70, heavy ? 0.55 : 0.4);
+    const range = st.range * (heavy ? 1.15 : 1);
+    const e = this.nearestEnemy(range);
+    if (e && e.alive) {
+      const mul = st.dmg * (heavy ? st.heavy : 1) * (this.superSaiyan ? 1.55 : 1) * (1 + this.combo * 0.04);
+      const base = this.story() ? 12 + this.power / 560 : 18 + this.power / 400;
+      this.damageEnemy(e, base * mul, heavy ? 7 : 4.2);
+      this.trauma = Math.min(1, this.trauma + (heavy ? 0.32 : 0.18));
+      this.hitstop = heavy ? 0.06 : 0.04;
+    }
+    if (heavy && id === SWORD) this.fireCrescent();
+    else if (heavy && id === STAFF) this.firePulse();
+    else if (heavy && id === CANNON) this.fireVolley();
+  }
+
+  private doSlam() {
+    if (this.slamCd > 0) return;
+    if (this.energy < 18) {
+      this.toast("Zu wenig Energie");
+      return;
+    }
+    this.energy -= 18;
+    this.slamCd = this.story() ? 1.55 : 1.15;
+    this.punchT = 0.34;
+    this.attackDur = 0.34;
+    this.attackAnim = "slam";
+    this.audio.slam();
+    rumble(140, 0.7);
+    if (this.flying || !this.grounded) this.vy = -16;
+    else this.vy = 4.2;
+    const r = 4.6 * (this.superSaiyan ? 1.25 : 1);
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      const dx = e.x - this.px;
+      const dz = e.z - this.pz;
+      const d = Math.hypot(dx, dz);
+      if (d < r && Math.abs(e.y - this.py) < 5) {
+        const fall = 1 - d / r;
+        const dmg = (this.story() ? 16 : 24) + this.power / 420;
+        this.damageEnemy(e, dmg * fall * (this.superSaiyan ? 1.4 : 1), 8);
+        e.vy += 6 * fall;
+      }
+    }
+    this.burst(this.px, this.py + 0.2, this.pz, 14);
+    this.trauma = Math.min(1, this.trauma + 0.4);
+    this.toast("Ki-Schlag");
+  }
+
+  private doBarrage() {
+    if (this.punchCd > 0.12) return;
+    if (this.energy < 16) {
+      this.toast("Zu wenig Energie");
+      return;
+    }
+    this.energy -= 16;
+    this.punchCd = this.story() ? 0.85 : 0.62;
+    this.punchT = 0.48;
+    this.attackDur = 0.48;
+    this.attackAnim = "jab";
+    this.audio.punch();
+    rumble(90, 0.5);
+    const range = weaponOf(this.heldId()).range * 1.08;
+    const e = this.nearestEnemy(range);
+    if (e && e.alive) {
+      const hits = 4;
+      const base = (this.story() ? 7 : 11) + this.power / 680;
+      const mul = weaponOf(this.heldId()).dmg * (this.superSaiyan ? 1.45 : 1);
+      this.damageEnemy(e, base * mul * hits, 5.5);
+      this.trauma = Math.min(1, this.trauma + 0.28);
+      this.hitstop = 0.05;
+    }
+    this.burst(this.px, this.py + 1.1, this.pz, 8);
+    this.toast("Hagel");
+  }
+
+  private useItem(id: number) {
+    this.placeCd = 0.28;
+    if (this.mode !== "creative") {
+      if ((this.inv[id] ?? 0) <= 0) {
+        this.toast("Nichts da");
+        return;
+      }
+      this.inv[id] = Math.max(0, (this.inv[id] ?? 0) - 1);
+    }
+    if (id === BEAN) {
+      this.health = Math.min(MAX_HEALTH, this.health + 34);
+      this.toast("Senzu · Körper heilt");
+    } else if (id === VIAL) {
+      this.energy = MAX_ENERGY;
+      this.toast("Ki-Phiole");
+    }
+    this.audio.collect();
+    useHud.getState().patch({ inventory: this.inv.slice(), health: this.health, energy: this.energy });
+  }
+
+  private giveItem(id: number, n = 1, label?: string) {
+    if (this.mode === "creative") return;
+    this.inv[id] = Math.min(INV_STACK, (this.inv[id] ?? 0) + n);
+    if (isWeapon(id) && !this.hotbarIds.includes(id)) {
+      const slot = this.hotbarIds.findIndex((x) => !isWeapon(x) && x !== BEAN && x !== VIAL);
+      if (slot >= 0) this.hotbarIds[slot] = id;
+      else if (this.hotbarIds.length < 9) this.hotbarIds.push(id);
+    }
+    this.toast(label ?? `+${ITEM_NAMES[id] ?? "Gegenstand"}`);
+    useHud.getState().patch({ inventory: this.inv.slice(), hotbar: this.hotbarIds.slice() });
   }
 
   private tryDash() {
@@ -1934,7 +2113,7 @@ export class GameEngine {
       this.mineKey = "";
       return;
     }
-    this.mineT += dt * (this.superSaiyan ? 1.85 : 1) * (this.mode === "creative" ? 4 : 1);
+    this.mineT += dt * (this.superSaiyan ? 1.85 : 1) * (this.mode === "creative" ? 4 : 1) * weaponOf(this.heldId()).mine;
     if (this.mineT >= hard) {
       this.breakBlock(hit.x, hit.y, hit.z, hit.block);
       this.mineT = 0;
@@ -1946,7 +2125,7 @@ export class GameEngine {
     const hit = this.aimHit();
     if (!hit) return;
     const id = this.hotbarIds[this.selected] ?? 0;
-    if (!id) return;
+    if (!id || isWeapon(id) || isConsumable(id)) return;
     if (this.mode !== "creative") {
       const have = this.inv[id] ?? 0;
       if (have <= 0) {
@@ -2017,7 +2196,9 @@ export class GameEngine {
     const heavy = charge > 0.72;
     if (heavy) this.audio.beam();
     else this.audio.ki();
-    this.punchT = 0.14;
+    this.attackAnim = "beam";
+    this.punchT = 0.16;
+    this.attackDur = 0.16;
     const e = this.eye();
     const d = this.lookDir();
     const b = this.blasts.find((x) => !x.active);
@@ -2025,7 +2206,11 @@ export class GameEngine {
     b.active = true;
     b.hostile = false;
     b.life = 1.35 + charge * 0.55;
-    b.dmg = (this.story() ? 16 + this.power / 340 : 22 + this.power / 260) * (0.55 + charge) * (this.superSaiyan ? 1.65 : 1);
+    b.dmg =
+      (this.story() ? 16 + this.power / 340 : 22 + this.power / 260) *
+      (0.55 + charge) *
+      (this.superSaiyan ? 1.65 : 1) *
+      weaponOf(this.heldId()).kiMul;
     b.radius = 0.14 + charge * 0.26;
     const spd = (36 + charge * 22) * (this.superSaiyan ? 1.28 : 1);
     b.x = e.x + d.x * 0.7;
@@ -2040,6 +2225,143 @@ export class GameEngine {
     b.mesh.visible = true;
     b.mesh.position.set(b.x, b.y, b.z);
     this.trauma = Math.min(1, this.trauma + 0.1 + charge * 0.12);
+  }
+
+  private fireDisc(charge: number) {
+    if (this.kiCd > 0) return;
+    const cost = 22 + charge * 18;
+    if (this.energy < cost * 0.4) {
+      this.toast("Ki erschöpft");
+      return;
+    }
+    this.energy = Math.max(0, this.energy - cost);
+    this.kiCd = 0.32;
+    this.attackAnim = "beam";
+    this.punchT = 0.28;
+    this.attackDur = 0.28;
+    this.audio.disc();
+    const e = this.eye();
+    const d = this.lookDir();
+    const b = this.blasts.find((x) => !x.active);
+    if (!b) return;
+    b.active = true;
+    b.hostile = false;
+    b.life = 1.8;
+    b.dmg =
+      (this.story() ? 22 : 32) *
+      (0.8 + charge) *
+      (this.superSaiyan ? 1.7 : 1) *
+      weaponOf(this.heldId()).kiMul;
+    b.radius = 0.55 + charge * 0.35;
+    const spd = 28 * (this.superSaiyan ? 1.2 : 1);
+    b.x = e.x + d.x * 0.8;
+    b.y = e.y + d.y * 0.8;
+    b.z = e.z + d.z * 0.8;
+    b.vx = d.x * spd;
+    b.vy = d.y * spd * 0.35;
+    b.vz = d.z * spd;
+    const mat = b.mesh.material as THREE.MeshBasicMaterial;
+    mat.color.setHex(0xe8f4ff);
+    b.mesh.scale.set(2.4, 0.18, 2.4);
+    b.mesh.visible = true;
+    b.mesh.position.set(b.x, b.y, b.z);
+    this.trauma = Math.min(1, this.trauma + 0.22);
+    this.toast("Ki-Scheibe");
+  }
+
+  private fireCrescent() {
+    const e = this.eye();
+    const d = this.lookDir();
+    const b = this.blasts.find((x) => !x.active);
+    if (!b) return;
+    this.audio.slash();
+    b.active = true;
+    b.hostile = false;
+    b.life = 0.85;
+    b.dmg = (this.story() ? 14 : 20) * (this.superSaiyan ? 1.55 : 1) * weaponOf(SWORD).kiMul;
+    b.radius = 0.42;
+    const spd = 34 * (this.superSaiyan ? 1.22 : 1);
+    b.x = e.x + d.x * 0.7;
+    b.y = e.y + d.y * 0.7;
+    b.z = e.z + d.z * 0.7;
+    b.vx = d.x * spd;
+    b.vy = d.y * spd * 0.2;
+    b.vz = d.z * spd;
+    const mat = b.mesh.material as THREE.MeshBasicMaterial;
+    mat.color.setHex(0xc8e8ff);
+    b.mesh.scale.set(1.8, 0.12, 1.8);
+    b.mesh.visible = true;
+    b.mesh.position.set(b.x, b.y, b.z);
+    this.toast("Sichel");
+  }
+
+  private firePulse() {
+    const e = this.eye();
+    const d = this.lookDir();
+    const b = this.blasts.find((x) => !x.active);
+    if (!b) return;
+    this.audio.ki();
+    b.active = true;
+    b.hostile = false;
+    b.life = 1.15;
+    b.dmg = (this.story() ? 18 : 26) * (this.superSaiyan ? 1.5 : 1) * weaponOf(STAFF).kiMul;
+    b.radius = 0.48;
+    const spd = 18 * (this.superSaiyan ? 1.15 : 1);
+    b.x = e.x + d.x * 0.85;
+    b.y = e.y + d.y * 0.85;
+    b.z = e.z + d.z * 0.85;
+    b.vx = d.x * spd;
+    b.vy = d.y * spd * 0.45;
+    b.vz = d.z * spd;
+    const mat = b.mesh.material as THREE.MeshBasicMaterial;
+    mat.color.setHex(0x7ec8e8);
+    b.mesh.scale.setScalar(1.65);
+    b.mesh.visible = true;
+    b.mesh.position.set(b.x, b.y, b.z);
+    this.toast("Stabstoß");
+  }
+
+  private fireVolley() {
+    const e = this.eye();
+    const d = this.lookDir();
+    const cost = this.story() ? 18 : 14;
+    if (this.energy < cost) {
+      this.fireKi(0.4);
+      return;
+    }
+    this.energy = Math.max(0, this.energy - cost);
+    this.kiCd = 0.28;
+    this.attackAnim = "beam";
+    this.punchT = 0.22;
+    this.attackDur = 0.22;
+    this.audio.ki();
+    const offs = [-0.16, 0, 0.16];
+    for (const off of offs) {
+      const b = this.blasts.find((x) => !x.active);
+      if (!b) break;
+      const cs = Math.cos(off);
+      const sn = Math.sin(off);
+      const dx = d.x * cs - d.z * sn;
+      const dz = d.x * sn + d.z * cs;
+      b.active = true;
+      b.hostile = false;
+      b.life = 1.05;
+      b.dmg = (this.story() ? 10 : 14) * (this.superSaiyan ? 1.45 : 1) * weaponOf(CANNON).kiMul;
+      b.radius = 0.16;
+      const spd = 40 * (this.superSaiyan ? 1.22 : 1);
+      b.x = e.x + dx * 0.7;
+      b.y = e.y + d.y * 0.7;
+      b.z = e.z + dz * 0.7;
+      b.vx = dx * spd;
+      b.vy = d.y * spd;
+      b.vz = dz * spd;
+      const mat = b.mesh.material as THREE.MeshBasicMaterial;
+      mat.color.setHex(0x9ee8f0);
+      b.mesh.scale.setScalar(0.95);
+      b.mesh.visible = true;
+      b.mesh.position.set(b.x, b.y, b.z);
+    }
+    this.toast("Salve");
   }
 
   private enemyKi(e: Enemy, spread = 0) {
@@ -2198,6 +2520,12 @@ export class GameEngine {
       if (e.kind === "shooter") this.spawnOrb(e.x + 0.3, e.y + 0.9, e.z, 18);
       this.stats.kills += 1;
       this.noteQuest();
+      if (e.kind === "brute") this.giveItem(STAFF, 1, "Kampfstab");
+      else if (e.kind === "shooter") this.giveItem(CANNON, 1, "Ki-Rohr");
+      else if (e.kind === "elite" || e.boss) this.giveItem(SWORD, 1, "Ki-Klinge");
+      else if (e.kind === "grunt" && Math.random() < 0.22) this.giveItem(PICK, 1, "Spitzhacke");
+      if (Math.random() < 0.4) this.giveItem(BEAN, 1, "Senzu");
+      if (Math.random() < 0.28) this.giveItem(VIAL, 1, "Ki-Phiole");
       if (e.boss && this.campaign) {
         this.health = Math.min(MAX_HEALTH, this.health + 18);
         if (!this.bossDown.includes(this.planet)) this.bossDown.push(this.planet);
@@ -2661,7 +2989,10 @@ export class GameEngine {
       this.lookSwayX,
       this.lookSwayY,
       this.sneaking,
+      this.attackAnim,
+      this.attackDur,
     );
+    setViewWeapon(this.fists, isWeapon(this.heldId()) ? this.heldId() : FIST);
     this.fists.left.visible = true;
     this.fists.right.visible = true;
     this.auraLight.intensity = this.superSaiyan ? 3.2 : this.charge * 2.6;
@@ -2718,7 +3049,9 @@ export class GameEngine {
       balls: this.world.balls.map((b) => b.taken),
       ballsGot: got,
       selected: this.selected,
-      target: hit ? BLOCK_NAMES[hit.block] ?? null : null,
+      target: hit
+        ? (BLOCK_NAMES[hit.block] ?? ITEM_NAMES[this.heldId()] ?? null)
+        : (ITEM_NAMES[this.heldId()] ?? null),
       radar,
       lookPower: lookE && lookE.alive ? lookE.power | 0 : null,
       lookName: lookE && lookE.alive ? lookE.name ?? kindLabel(lookE.kind, lookE.species) : null,
@@ -2732,6 +3065,8 @@ export class GameEngine {
       ...this.questPatch(),
       planet: this.planet,
       planetName: PLANETS[this.planet].name,
+      landmark: this.nearestLandmark(),
+      weaponName: ITEM_NAMES[this.heldId()] ?? BLOCK_NAMES[this.heldId()] ?? "—",
       stage: this.stage,
       campaign: this.campaign,
       mode: this.mode,
@@ -2817,6 +3152,11 @@ export class GameEngine {
         bossMax: this.enemies.find((e) => e.boss)?.maxHp ?? 0,
         gruntHp: this.enemies.find((e) => e.kind === "grunt" && !e.boss)?.maxHp ?? 0,
         startPower: this.story() ? CAMP_START_POWER : START_POWER,
+        held: this.heldId(),
+        weapon: ITEM_NAMES[this.heldId()] ?? null,
+        anim: this.attackAnim,
+        slamCd: this.slamCd,
+        landmarks: this.world.landmarks.map((l) => l.name),
       }),
       getInv: () => this.inv.slice(),
       getQuest: () => this.questView(),
@@ -3015,6 +3355,11 @@ declare global {
         bossMax: number;
         gruntHp: number;
         startPower: number;
+        held?: number;
+        weapon?: string | null;
+        anim?: string;
+        slamCd?: number;
+        landmarks?: string[];
       };
       getInv?: () => number[];
       getQuest?: () => { title: string; value: number; target: number };

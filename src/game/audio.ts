@@ -129,6 +129,18 @@ export class GameAudio {
     this.beep(90, 0.5, "sawtooth", 0.12, 60);
     this.beep(640, 0.35, "square", 0.07, 1800);
   }
+  slash() {
+    this.noise(0.06, 0.12, 1800);
+    this.beep(520, 0.1, "triangle", 0.08, 180);
+  }
+  slam() {
+    this.noise(0.18, 0.18, 140);
+    this.beep(70, 0.28, "sawtooth", 0.14, 40);
+  }
+  disc() {
+    this.beep(300, 0.22, "sawtooth", 0.09, 90);
+    this.beep(1100, 0.16, "sine", 0.06, 400);
+  }
   step() {
     this.noise(0.04, 0.04, 220);
   }

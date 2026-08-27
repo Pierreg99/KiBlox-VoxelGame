@@ -1,6 +1,6 @@
 # PLAN — KI BLOX
 
-Stand: 2026-08-27. v0.5.1. Browser, Singleplayer, kein Backend.
+Stand: 2026-08-27. v0.7.0. Browser, Singleplayer, kein Backend.
 
 ## 1. Vision
 
@@ -16,7 +16,7 @@ Session: Titel → Kampagne → Venn → Kugeln / Boss → Tor → nächste Welt
 2. **Lesbare Physik.** FPS-Strafe, Step-up, Snap-down, Void-Rescue, Schwimmen.
 3. **Ki statt Inventar-RPG.** Power, Energie, eine Transformation.
 4. **Dichte 128er-Welten.** Ein Planet zur Zeit, Travel regeneriert.
-5. **Offline.** `localStorage` v5. Auth/DB aus.
+5. **Offline.** `localStorage` v7. Auth/DB aus.
 
 ## 3. Architektur
 

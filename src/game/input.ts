@@ -23,6 +23,8 @@ export type Actions = {
   invPressed: boolean;
   questPressed: boolean;
   rulesPressed: boolean;
+  slamPressed: boolean;
+  barragePressed: boolean;
   hotbar: number | null;
   scroll: number;
 };
@@ -52,6 +54,8 @@ const EMPTY: Actions = {
   invPressed: false,
   questPressed: false,
   rulesPressed: false,
+  slamPressed: false,
+  barragePressed: false,
   hotbar: null,
   scroll: 0,
 };
@@ -83,6 +87,7 @@ const GAME_CODES = new Set([
   "KeyZ",
   "KeyC",
   "KeyX",
+  "KeyG",
   "Tab",
   "ControlLeft",
   "ControlRight",
@@ -126,6 +131,8 @@ export class Input {
   touchSsj = false;
   touchCrouch = false;
   touchSprint = false;
+  touchSlam = false;
+  touchBarrage = false;
   private punchEdge = false;
   private placeEdge = false;
   private kiEdge = false;
@@ -138,6 +145,8 @@ export class Input {
   private questEdge = false;
   private rulesEdge = false;
   private zoomEdge = false;
+  private slamEdge = false;
+  private barrageEdge = false;
   enabled = false;
   private el: HTMLElement;
   private unsub: (() => void)[] = [];
@@ -171,6 +180,8 @@ export class Input {
       if (ev.code === "KeyJ" || ev.code === "Tab") this.questEdge = true;
       if (ev.code === "KeyH") this.rulesEdge = true;
       if (ev.code === "KeyZ") this.zoomEdge = true;
+      if (ev.code === "KeyX" || ev.code === "KeyG") this.slamEdge = true;
+      if (ev.code === "KeyV") this.barrageEdge = true;
     });
     on(window, "keyup", (e) => {
       const code = (e as KeyboardEvent).code;
@@ -414,6 +425,12 @@ export class Input {
     this.questEdge = false;
     a.rulesPressed = this.rulesEdge;
     this.rulesEdge = false;
+    a.slamPressed = this.slamEdge || this.touchSlam;
+    this.slamEdge = false;
+    this.touchSlam = false;
+    a.barragePressed = this.barrageEdge || this.touchBarrage;
+    this.barrageEdge = false;
+    this.touchBarrage = false;
 
     for (let i = 1; i <= 9; i++) {
       if (k.has(`Digit${i}`) && !this.prevKeys.has(`Digit${i}`)) a.hotbar = i - 1;

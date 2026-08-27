@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0 — 2026-08-27
+
+- Weapons in the bag: Fäuste, Ki-Klinge, Kampfstab, Spitzhacke, Ki-Rohr, Senzu, Ki-Phiole
+- Attacks: jab/hook/upper combo, heavy (RMB), Ki disc (hold Q), slam (X), hail (V). Sword crescent, staff pulse, cannon volley
+- Viewmodel kit on the right arm — 3D steel and wrap, not a photo
+- Maps: path to the temple, watchtower, quarry, lava bridge, ice crown, cloud ring, plus a gate ruin on every world
+- Inventory lists gear and blocks. Hotbar 1–9 mixes tools and tiles. Save slot `kiblox-save-v7`
+
 ## 0.6.5 — 2026-08-27
 
 - Kampagne is a real fight: guarded orbs, packs at the temple, short i-frames, fall/lava kill

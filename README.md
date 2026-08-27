@@ -18,7 +18,7 @@ Five worlds, six peoples, seven orbs, one wish-serpent.
 
 ## Spielen
 
-Fortschritt lokal (`localStorage`, Schlüssel `kiblox-save-v6`). Kein Account.
+Fortschritt lokal (`localStorage`, Schlüssel `kiblox-save-v7`). Kein Account.
 
 Quellcode: [github.com/Pierreg99/KIBlockx](https://github.com/Pierreg99/KIBlockx)
 
@@ -27,12 +27,12 @@ Quellcode: [github.com/Pierreg99/KIBlockx](https://github.com/Pierreg99/KIBlockx
 | **Kampagne** | Orbit-Saga: Verdant → Terra → Cinder → Rime → Aether |
 | **Kreativ** | Unendliche Blöcke, kein Schaden, Bau-Aufgaben |
 | **Freies Spiel** | Kugeln, Kampf und Bau ohne Kampagnen-Tor |
-| **Inventar** | Abbauen füllt den Beutel, Setzen verbraucht. I öffnet das Raster |
+| **Inventar** | Waffen, Senzu, Blöcke. Abbauen füllt den Beutel. I öffnet das Raster |
 | **Aufgaben** | Fortschritt und Regeln je Modus. J Log, H Regeln |
 | **Völker** | Solari, Veldari, Cryon, Automata, Thrynn, Aetheri — blocky Humanoids, Walk/Fly |
-| **Kampf** | Schlag, geladener Ki-Stoß, Dash, Super Saiyan ab 4500 Ki |
-| **Welt** | 128×80×128 Blöcke, Inseln, Tempel, Bosse |
-| **Bauen** | Halten = abbauen, Rechtsklick = setzen, Hotbar 1–5 |
+| **Kampf** | Combo, schwerer Schlag, Ki-Scheibe, Slam, Hagel, Super Saiyan ab 4500 Ki |
+| **Welt** | 128×80×128 Blöcke, Inseln, Tempel, Pfade, Tore, Bosse |
+| **Bauen** | Halten = abbauen, Rechtsklick = setzen (oder schwer), Hotbar 1–9 |
 
 ### Steuerung
 
@@ -52,9 +52,11 @@ Quellcode: [github.com/Pierreg99/KIBlockx](https://github.com/Pierreg99/KIBlockx
 | I | Inventar |
 | J / Tab | Aufgaben |
 | H | Regeln |
-| Linksklick halten | Abbauen / schlagen |
-| Rechtsklick | Block setzen |
-| Q halten, loslassen | Geladener Ki-Stoß |
+| Linksklick | Abbauen / Combo-Schlag |
+| Rechtsklick | Block setzen · mit Waffe: schwerer Schlag |
+| Q halten, loslassen | Ki-Stoß · lange halten: Ki-Scheibe |
+| X / G | Ki-Slam (auch Flug + Blick runter) |
+| V | Hagel (vier Schläge) |
 | R | Dash |
 | F | Super Saiyan |
 | 1–9 / Mausrad | Hotbar |

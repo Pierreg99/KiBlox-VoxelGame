@@ -2,7 +2,7 @@
 
 Letzte Aktualisierung: 2026-08-27.
 
-Das Spiel ist **spielbar**. v0.6.5: Kampagne hart (bewachte Kugeln, kurze I-Frames, Wächter mit Adds).
+Das Spiel ist **spielbar**. v0.7.0: Waffen, Combos, Karten-Landmarken, Beutel mit Gerät.
 
 ## Status
 
@@ -10,11 +10,11 @@ Das Spiel ist **spielbar**. v0.6.5: Kampagne hart (bewachte Kugeln, kurze I-Fram
 |---------|-------|
 | Titel / Laden / Pause / Tod / Wunsch | Fertig |
 | Drei Modi + Regeln-Overlay | Fertig |
-| Inventar + Hotbar-Zählung | Fertig |
+| Inventar + Hotbar-Zählung | Fertig (Waffen + Blöcke, v7) |
 | Aufgaben / Quest-Log / Progress | Fertig |
 | Voxel-Welt + Chunk-Meshing | Fertig |
 | FPS-Bewegung, Ki-Flug Blick, Snap, Step-up, Void-Rescue | Fertig |
-| localStorage Save v6 | Fertig |
+| localStorage Save v7 | Fertig |
 | Bauen / Abbauen, Hotbar Desktop + Touch | Fertig |
 | Ki-Kampf, Dash, Super Saiyan | Fertig |
 | Drachenkugeln + Orryx-Wünsche | Fertig |
@@ -64,7 +64,7 @@ Das Spiel ist **spielbar**. v0.6.5: Kampagne hart (bewachte Kugeln, kurze I-Fram
 |---|---|
 | Kern (`src/game` + HUD) | ~4.5k Zeilen |
 | Engine | ~2.0k Zeilen |
-| Save-Key | `kiblox-save-v5` |
+| Save-Key | `kiblox-save-v7` |
 | Gegner-Spawns | bis 24 + Boss |
 | Drachenkugeln | 7 |
 | Edit-Cap im Save | 2500 |

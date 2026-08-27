@@ -76,8 +76,8 @@ export const BLOCK_HARDNESS: Record<number, number> = {
   [BASALT]: 0.82,
 };
 
-export const HOTBAR = [GRASS, DIRT, STONE, WOOD, KI] as const;
-export const CREATIVE_HOTBAR = [GRASS, DIRT, STONE, WOOD, KI, TEMPLE, METAL, ICE, BASALT] as const;
+export const HOTBAR = [20, 23, 1, 2, 3, 5, 7, 25, 26] as const;
+export const CREATIVE_HOTBAR = [20, 21, 22, 23, 24, 1, 3, 11, 7] as const;
 export const PLACEABLE = [
   GRASS,
   DIRT,
@@ -133,5 +133,5 @@ export const REACH = 6.8;
 export const BALL_COUNT = 7;
 export const SEA_LEVEL = 16;
 
-export const SAVE_KEY = "kiblox-save-v6";
-export const SAVE_VERSION = 6;
+export const SAVE_KEY = "kiblox-save-v7";
+export const SAVE_VERSION = 7;

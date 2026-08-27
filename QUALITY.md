@@ -13,9 +13,9 @@ Was „fertig“ für eine spielbare Session heißt. Kein Marketing.
 | Sprung / Flug | Leertaste springt, in der Luft nochmal = Ki-Flug geradeaus (Space hoch, Shift runter) |
 | Charaktere | Minecraft-Proportion (32 px / 1.8 m), Ki-Gi, Walk/Fly/Punch |
 | Völker | Solari, Veldari, Cryon, Automata, Thrynn, Aetheri — original |
-| Kampf | Schlag, geladener Ki-Stoß, Dash, SSJ ab 4500 |
-| Kampagne | Fünf Welten, Story, Boss, Tor |
-| Save | `kiblox-save-v5`, lokal, kein Account |
+| Kampf | Combo, schwerer Schlag, Ki-Scheibe, Slam, Hagel, SSJ ab 4500 |
+| Kampagne | Fünf Welten, Story, Boss, Tor, Landmarken |
+| Save | `kiblox-save-v7`, lokal, kein Account |
 | Mobile | Touch-Sticks, Rede, Flug, Ki |
 | Konsole | Keine uncaught errors im Play-Pfad |
 

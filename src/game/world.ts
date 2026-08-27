@@ -65,6 +65,8 @@ export type NpcSpawn = {
   lines: string[];
 };
 
+export type Landmark = { name: string; x: number; y: number; z: number };
+
 function idx(x: number, y: number, z: number) {
   return x + z * SX + y * SX * SZ;
 }
@@ -119,6 +121,7 @@ export class World {
   balls: DragonBall[] = [];
   enemies: EnemySpawn[] = [];
   npcs: NpcSpawn[] = [];
+  landmarks: Landmark[] = [];
 
   constructor(seed: number, planet: PlanetId = "verdant") {
     this.seed = seed;
@@ -724,6 +727,12 @@ export class World {
       },
     ];
 
+    this.landmarks = [
+      { name: "Nest", x: this.spawn.x, y: this.spawn.y, z: this.spawn.z },
+      { name: "Tempel", x: tx + 0.5, y: th + 4, z: tz + 0.5 },
+    ];
+    this.carveMaps(P.id, rngI, height, vx, vz, plazaH, tx, tz, th);
+
     if (P.spikes !== "none") {
       const block = P.spikes === "ice" ? ICE : BASALT;
       for (let i = 0; i < 48; i++) {
@@ -744,6 +753,164 @@ export class World {
       if (this.isSolid(x, y, z) && !this.isSolid(x, y + 1, z)) return y + 1;
     }
     return SEA_LEVEL + 1;
+  }
+
+  private mark(name: string, x: number, z: number) {
+    this.landmarks.push({ name, x: x + 0.5, y: this.surfaceY(x, z), z: z + 0.5 });
+  }
+
+  private pillar(x: number, z: number, h: number, block: number, cap?: number) {
+    const y0 = this.surfaceY(x, z);
+    for (let dy = 0; dy < h; dy++) this.set(x, y0 + dy, z, dy === h - 1 && cap != null ? cap : block);
+  }
+
+  private carveMaps(
+    planet: PlanetId,
+    rng: () => number,
+    height: Int16Array,
+    vx: number,
+    vz: number,
+    plazaH: number,
+    tx: number,
+    tz: number,
+    th: number,
+  ) {
+    const pick = () => {
+      for (let i = 0; i < 24; i++) {
+        const x = 10 + ((rng() * (SX - 20)) | 0);
+        const z = 10 + ((rng() * (SZ - 20)) | 0);
+        const h = height[x + z * SX] ?? 0;
+        if (h <= SEA_LEVEL + 2) continue;
+        if (Math.hypot(x - vx, z - vz) < 16) continue;
+        if (Math.hypot(x - tx, z - tz) < 14) continue;
+        return { x, z, h };
+      }
+      return { x: vx + 18, z: vz + 14, h: plazaH };
+    };
+
+    if (planet === "verdant") {
+      const a = pick();
+      for (let dy = 0; dy < 9; dy++) {
+        this.set(a.x, a.h + dy, a.z, WOOD);
+        if (dy > 4) {
+          this.set(a.x + 1, a.h + dy, a.z, WOOD);
+          this.set(a.x - 1, a.h + dy, a.z, WOOD);
+          this.set(a.x, a.h + dy, a.z + 1, WOOD);
+          this.set(a.x, a.h + dy, a.z - 1, WOOD);
+        }
+      }
+      for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) this.set(a.x + dx, a.h + 9, a.z + dz, LEAVES);
+      this.set(a.x, a.h + 10, a.z, KI);
+      this.mark("Wachturm", a.x, a.z);
+      const b = pick();
+      for (let i = -6; i <= 6; i++) {
+        this.set(b.x + i, Math.max(SEA_LEVEL, b.h - 2), b.z, SAND);
+        this.set(b.x + i, Math.max(1, b.h - 3), b.z, WATER);
+      }
+      this.mark("Flussbett", b.x, b.z);
+    } else if (planet === "terra") {
+      const a = pick();
+      for (let dz = -3; dz <= 3; dz++) {
+        for (let dx = -3; dx <= 3; dx++) {
+          for (let dy = 0; dy < 4; dy++) {
+            if (Math.hypot(dx, dz) < 3.4) this.set(a.x + dx, a.h - dy, a.z + dz, AIR);
+          }
+          if (Math.abs(dx) === 3 || Math.abs(dz) === 3) this.set(a.x + dx, a.h - 4, a.z + dz, METAL);
+        }
+      }
+      this.set(a.x, a.h - 3, a.z, KI);
+      this.mark("Steinbruch", a.x, a.z);
+      const b = pick();
+      for (let dy = 0; dy < 5; dy++) this.set(b.x, b.h + dy, b.z, METAL);
+      this.set(b.x + 1, b.h + 2, b.z, METAL);
+      this.set(b.x - 1, b.h + 1, b.z, METAL);
+      this.mark("Schrottkamm", b.x, b.z);
+    } else if (planet === "cinder") {
+      const a = pick();
+      for (let i = 0; i < 10; i++) {
+        this.set(a.x + i, a.h, a.z, BASALT);
+        this.set(a.x + i, a.h, a.z + 1, BASALT);
+        this.set(a.x + i, a.h - 1, a.z, LAVA);
+      }
+      this.mark("Lavabrücke", a.x + 5, a.z);
+      const b = pick();
+      for (let dy = 0; dy < 8; dy++) this.set(b.x, b.h + dy, b.z, BASALT);
+      this.set(b.x, b.h + 8, b.z, LAVA);
+      this.set(b.x + 1, b.h + 3, b.z, METAL);
+      this.set(b.x - 1, b.h + 3, b.z, METAL);
+      this.mark("Esse", b.x, b.z);
+    } else if (planet === "rime") {
+      const a = pick();
+      for (let i = 0; i < 6; i++) {
+        const ang = (i / 6) * Math.PI * 2;
+        const x = (a.x + Math.cos(ang) * 5) | 0;
+        const z = (a.z + Math.sin(ang) * 5) | 0;
+        this.pillar(x, z, 6 + ((rng() * 4) | 0), ICE, KI);
+      }
+      this.mark("Eiskranz", a.x, a.z);
+      const b = pick();
+      for (let dy = 0; dy < 11; dy++) this.set(b.x, b.h + dy, b.z, ICE);
+      this.set(b.x, b.h + 11, b.z, KI);
+      this.mark("Frostnadel", b.x, b.z);
+    } else {
+      const a = pick();
+      for (let i = 0; i < 8; i++) {
+        const ang = (i / 8) * Math.PI * 2;
+        const x = (a.x + Math.cos(ang) * 6) | 0;
+        const z = (a.z + Math.sin(ang) * 6) | 0;
+        this.set(x, a.h + 6, z, CLOUD);
+        this.set(x, a.h + 7, z, KI);
+      }
+      this.mark("Torring", a.x, a.z);
+      const b = pick();
+      for (let dy = 0; dy < 4; dy++) {
+        for (let dx = -2; dx <= 2; dx++) this.set(b.x + dx, b.h + 8 + dy, b.z, CLOUD);
+      }
+      this.mark("Himmelssteg", b.x, b.z);
+    }
+    void th;
+    this.layPath(vx, vz, tx, tz, height, plazaH);
+    const gate = pick();
+    if (planet === "verdant") {
+      this.ruinRing(gate.x, gate.z, 4, WOOD, LEAVES);
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) this.set(gate.x + dx, gate.h, gate.z + dz, PATH);
+      this.set(gate.x, gate.h + 1, gate.z, KI);
+      this.mark("Dorf", gate.x, gate.z);
+    } else if (planet === "terra") {
+      this.ruinRing(gate.x, gate.z, 5, METAL, KI);
+      this.mark("Relais", gate.x, gate.z);
+    } else if (planet === "cinder") {
+      this.ruinRing(gate.x, gate.z, 4, BASALT, LAVA);
+      this.mark("Aschtor", gate.x, gate.z);
+    } else if (planet === "rime") {
+      this.ruinRing(gate.x, gate.z, 5, ICE, KI);
+      this.mark("Gletschertor", gate.x, gate.z);
+    } else {
+      this.ruinRing(gate.x, gate.z, 5, CLOUD, KI);
+      this.mark("Wolkentor", gate.x, gate.z);
+    }
+  }
+
+  private layPath(ax: number, az: number, bx: number, bz: number, height: Int16Array, plazaH: number) {
+    const steps = 22;
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const x = Math.max(1, Math.min(SX - 2, (ax + (bx - ax) * t) | 0));
+      const z = Math.max(1, Math.min(SZ - 2, (az + (bz - az) * t) | 0));
+      const h = height[x + z * SX] ?? plazaH;
+      this.set(x, h, z, PATH);
+      this.set(x + 1, h, z, PATH);
+    }
+    this.mark("Pfad", ((ax + bx) / 2) | 0, ((az + bz) / 2) | 0);
+  }
+
+  private ruinRing(x: number, z: number, r: number, block: number, cap?: number) {
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2;
+      const px = (x + Math.cos(ang) * r) | 0;
+      const pz = (z + Math.sin(ang) * r) | 0;
+      this.pillar(px, pz, 3 + (i % 3), block, cap);
+    }
   }
 
   scatterBalls(rng: () => number) {

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { BALL_COUNT, HOTBAR, MAX_ENERGY, MAX_HEALTH, START_POWER } from "./constants";
+import { ITEM_MAX } from "./items";
 import type { PlanetId, Stage } from "./campaign";
 import type { GameMode } from "./quests";
 
@@ -59,6 +60,8 @@ export type HudState = {
   mode: GameMode;
   planet: PlanetId;
   planetName: string;
+  landmark: string;
+  weaponName: string;
   stage: Stage;
   quest: string;
   questHint: string;
@@ -87,7 +90,7 @@ const initial: HudState = {
   balls: Array.from({ length: BALL_COUNT }, () => false),
   selected: 0,
   hotbar: [...HOTBAR],
-  inventory: Array.from({ length: 20 }, () => 0),
+  inventory: Array.from({ length: ITEM_MAX }, () => 0),
   toast: null,
   target: null,
   radar: [],
@@ -107,6 +110,8 @@ const initial: HudState = {
   mode: "story",
   planet: "verdant",
   planetName: "Verdant",
+  landmark: "Nest",
+  weaponName: "Fäuste",
   stage: "intro",
   quest: "",
   questHint: "",

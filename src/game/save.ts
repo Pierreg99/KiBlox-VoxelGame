@@ -1,4 +1,5 @@
-import { MAX_ENERGY, MAX_HEALTH, SAVE_KEY, SAVE_VERSION, START_POWER, HOTBAR, BLOCK_COUNT } from "./constants";
+import { MAX_ENERGY, MAX_HEALTH, SAVE_KEY, SAVE_VERSION, START_POWER, HOTBAR } from "./constants";
+import { ITEM_MAX, FIST } from "./items";
 import type { PlanetId, Stage } from "./campaign";
 import { emptyInv, emptyStats, starterInv, type GameMode, type QuestStats } from "./quests";
 
@@ -57,10 +58,11 @@ const defaults = (): SaveData => ({
 function migrateInv(raw: number[] | undefined): number[] {
   const base = emptyInv();
   if (!Array.isArray(raw)) return starterInv();
-  for (let i = 0; i < Math.min(BLOCK_COUNT, raw.length); i++) {
+  for (let i = 0; i < Math.min(ITEM_MAX, raw.length); i++) {
     const n = raw[i];
     if (typeof n === "number" && n > 0) base[i] = Math.min(99, n | 0);
   }
+  if (!base[FIST]) base[FIST] = 1;
   return base;
 }
 
@@ -93,7 +95,7 @@ function migrate(raw: Partial<SaveData>): SaveData {
 
 export function loadSave(): SaveData | null {
   try {
-    const t = localStorage.getItem(SAVE_KEY);
+    const t = localStorage.getItem(SAVE_KEY) ?? localStorage.getItem("kiblox-save-v6");
     if (!t) return null;
     const parsed = JSON.parse(t) as SaveData;
     return migrate(parsed);
@@ -121,7 +123,7 @@ export function clearSave() {
 
 export function hasSave() {
   try {
-    return !!localStorage.getItem(SAVE_KEY);
+    return !!(localStorage.getItem(SAVE_KEY) || localStorage.getItem("kiblox-save-v6"));
   } catch {
     return false;
   }

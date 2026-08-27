@@ -16,6 +16,7 @@ import {
   ScrollText,
   BookOpen,
   Check,
+  Sword,
 } from "lucide-react";
 import type { GameEngine } from "@/game/engine";
 import {
@@ -41,6 +42,7 @@ import {
 } from "@/game/constants";
 import { PLANET_ORDER, PLANETS } from "@/game/campaign";
 import { MODE_META } from "@/game/quests";
+import { GEAR_LIST, isGear, ITEM_NAMES, voxGearKey } from "@/game/items";
 import { useHud } from "@/game/store";
 
 export function GameApp() {
@@ -141,6 +143,9 @@ function PlayHud({ engineRef }: { engineRef: RefObject<GameEngine | null> }) {
                 {hud.power.toLocaleString("de-DE")}
               </span>
             </div>
+            <p className="mt-1 truncate text-[10px] tracking-[0.14em] text-subtle uppercase">
+              {hud.planetName} · {hud.landmark}
+            </p>
             {hud.lookPower != null && (
               <p className="mt-1 text-xs text-muted">
                 {hud.lookName ? <span className="text-fg">{hud.lookName} · </span> : null}
@@ -296,7 +301,9 @@ function PlayHud({ engineRef }: { engineRef: RefObject<GameEngine | null> }) {
           ))}
         </div>
         <p className="hidden text-[11px] text-subtle sm:block">
-          {hud.flying ? "Flug · W vor · Shift runter · Strg schneller · Z zoomen" : "Boden · W vor · Shift schleichen · Strg sprinten · Z zoomen"}
+          {hud.weaponName}
+          {hud.flying ? " · Flug · W vor · Shift runter" : " · Boden · W vor · Shift schleichen"}
+          {" · LMB Schlag · RMB schwer · Q Ki · X Slam · V Hagel"}
           {hud.superSaiyan ? " · Super Saiyan" : hud.ssjReady ? " · F Super Saiyan" : ""}
           {hud.mode !== "creative" ? ` · ${hud.ballsGot}/7 Kugeln` : ""}
           {" · I Beutel · J Aufgaben"}
@@ -382,7 +389,7 @@ function TitleOverlay({
       <div className="pointer-events-none scouter-frame" />
       <div className="pointer-events-none scouter-frame-b" />
       <p className="pointer-events-none absolute top-5 left-5 text-[11px] tracking-[0.18em] text-muted uppercase">
-        {hud.planetName || "Verdant"} · 0.6.4
+        {hud.planetName || "Verdant"} · 0.7.0
       </p>
       <p className="pointer-events-none absolute top-5 right-5 text-right font-display text-sm tracking-[0.2em] text-muted">
         SCOUTER
@@ -414,7 +421,7 @@ function TitleOverlay({
           </button>
         </div>
         <p className="mt-4 hidden text-center text-[11px] tracking-wide text-subtle sm:block">
-          W vor · A links · D rechts · Shift schleichen · Strg sprinten · Z zoomen
+          W vor · A links · D rechts · X Slam · V Hagel · Q Ki
         </p>
       </div>
     </div>
@@ -574,6 +581,11 @@ function DeadOverlay({ engine }: { engine: () => GameEngine | null }) {
 function InventoryOverlay({ engine }: { engine: () => GameEngine | null }) {
   const hud = useHud();
   const creative = hud.mode === "creative";
+  const show = (id: number) => creative || (hud.inventory[id] ?? 0) > 0;
+  const gearIds = GEAR_LIST.filter(show);
+  const blockIds = PLACEABLE.filter(show);
+  const empty = gearIds.length === 0 && blockIds.length === 0;
+  const label = (id: number) => ITEM_NAMES[id] ?? BLOCK_NAMES[id] ?? "—";
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-bg/50 px-4">
       <div className="mc-window">
@@ -585,28 +597,58 @@ function InventoryOverlay({ engine }: { engine: () => GameEngine | null }) {
           <p className="text-xs text-muted">{creative ? "Unendlich" : "Klick setzt in den Slot"}</p>
         </div>
         <span className="mc-rule" />
-        <div className="mt-1 grid grid-cols-4 gap-2 sm:grid-cols-8">
-          {PLACEABLE.map((id) => {
-            const n = hud.inventory[id] ?? 0;
-            const shown = creative || n > 0;
-            if (!shown) return null;
-            const inBar = hud.hotbar.includes(id);
-            return (
-              <button
-                key={id}
-                type="button"
-                title={BLOCK_NAMES[id]}
-                onClick={() => engine()?.setHotbarBlock(hud.selected, id)}
-                className={`flex flex-col items-center gap-1 p-2 ${inBar ? "mc-btn-go" : "mc-btn"}`}
-                style={{ height: "auto" }}
-              >
-                <VoxelSwatch id={id} />
-                <span className="hud-num text-[10px] text-muted">{creative ? "—" : n}</span>
-              </button>
-            );
-          })}
-        </div>
-        {PLACEABLE.every((id) => (hud.inventory[id] ?? 0) <= 0) && !creative ? (
+        {gearIds.length > 0 ? (
+          <>
+            <p className="mt-2 text-[10px] tracking-[0.16em] text-subtle uppercase">Waffen und Vorrat</p>
+            <div className="mt-1 grid grid-cols-4 gap-2 sm:grid-cols-7">
+              {gearIds.map((id) => {
+                const n = hud.inventory[id] ?? 0;
+                const inBar = hud.hotbar.includes(id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    title={label(id)}
+                    onClick={() => engine()?.setHotbarBlock(hud.selected, id)}
+                    className={`flex flex-col items-center gap-1 p-2 ${inBar ? "mc-btn-go" : "mc-btn"}`}
+                    style={{ height: "auto" }}
+                  >
+                    <VoxelSwatch id={id} />
+                    <span className="hud-num max-w-full truncate text-[10px] text-muted">
+                      {label(id)}
+                    </span>
+                    <span className="hud-num text-[10px] text-subtle">{creative ? "—" : n}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
+        {blockIds.length > 0 ? (
+          <>
+            <p className="mt-3 text-[10px] tracking-[0.16em] text-subtle uppercase">Blöcke</p>
+            <div className="mt-1 grid grid-cols-4 gap-2 sm:grid-cols-8">
+              {blockIds.map((id) => {
+                const n = hud.inventory[id] ?? 0;
+                const inBar = hud.hotbar.includes(id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    title={label(id)}
+                    onClick={() => engine()?.setHotbarBlock(hud.selected, id)}
+                    className={`flex flex-col items-center gap-1 p-2 ${inBar ? "mc-btn-go" : "mc-btn"}`}
+                    style={{ height: "auto" }}
+                  >
+                    <VoxelSwatch id={id} />
+                    <span className="hud-num text-[10px] text-muted">{creative ? "—" : n}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
+        {empty ? (
           <p className="mt-4 text-sm text-muted">Leer. Brich Blöcke, dann füllt sich der Beutel.</p>
         ) : null}
         <div className="mt-4 flex items-end gap-1.5">
@@ -785,6 +827,22 @@ function TouchPad({ engineRef }: { engineRef: RefObject<GameEngine | null> }) {
       <div className="pointer-events-auto absolute right-3 bottom-24 flex flex-col items-end gap-2 sm:right-4 sm:bottom-6">
         <div className="flex gap-2">
           <TouchBtn
+            label="Slam"
+            icon={<ChevronDown className="size-5" />}
+            onDown={() => {
+              const i = engineRef.current?.input;
+              if (i) i.touchSlam = true;
+            }}
+          />
+          <TouchBtn
+            label="Hagel"
+            icon={<Sword className="size-5" />}
+            onDown={() => {
+              const i = engineRef.current?.input;
+              if (i) i.touchBarrage = true;
+            }}
+          />
+          <TouchBtn
             label="Dash"
             icon={<FastForward className="size-5" />}
             onDown={() => {
@@ -931,6 +989,8 @@ function TouchBtn({
 }
 
 function voxKey(id: number) {
+  const gear = voxGearKey(id);
+  if (gear) return gear;
   if (id === GRASS) return "grass";
   if (id === DIRT) return "dirt";
   if (id === STONE) return "stone";
@@ -952,7 +1012,7 @@ function voxKey(id: number) {
 
 function VoxelSwatch({ id }: { id: number }) {
   return (
-    <span className="vox" data-vox={voxKey(id)} aria-hidden>
+    <span className={`vox${isGear(id) ? " vox-gear" : ""}`} data-vox={voxKey(id)} aria-hidden>
       <i className="vox-t" />
       <i className="vox-l" />
       <i className="vox-r" />

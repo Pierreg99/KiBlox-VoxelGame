@@ -1,6 +1,5 @@
 import {
   BASALT,
-  BLOCK_COUNT,
   CLOUD,
   ICE,
   KI,
@@ -8,6 +7,7 @@ import {
   SSJ_POWER,
   TEMPLE,
 } from "./constants";
+import { ITEM_MAX } from "./items";
 import { PLANETS, type PlanetId, type Stage } from "./campaign";
 
 export type GameMode = "story" | "creative" | "sandbox";
@@ -59,6 +59,7 @@ export const MODE_META: Record<GameMode, { name: string; tag: string; blurb: str
       "Sturz und Lava töten. I-Frames sind kurz. Ausweichen, laden, treffen.",
       "Abbauen füllt das Inventar. Setzen verbraucht Blöcke.",
       "W vor, A links, D rechts, S zurück. Shift schleichen. Strg sprinten. Z zoomen.",
+      "Linksklick: Schlag / Klinge. Rechtsklick mit Waffe: schwer. Q Ki, halten: Scheibe. X Slam. V Hagel. 1–9 Beutel.",
       "I Inventar · J Aufgaben · H Regeln · ESC Pause.",
     ],
   },
@@ -68,10 +69,10 @@ export const MODE_META: Record<GameMode, { name: string; tag: string; blurb: str
     blurb: "Unendliche Blöcke, kein Schaden. Aufgaben formen die Insel.",
     rules: [
       "Alle Blöcke sind frei. Nichts trifft dich.",
-      "Linksklick bricht, Rechtsklick setzt. I wählt den Block.",
+      "Hotbar: Fäuste, Klinge, Stab, Hacke, Rohr. Linksklick schlägt, Rechtsklick setzt oder schlägt schwer.",
       "Leertaste in der Luft startet Ki-Flug. W vor, A links, D rechts, S zurück. Leertaste hoch, Shift runter, Strg schneller. Z zoomen.",
-      "Aufgaben stehen oben. J öffnet die Liste.",
-      "1–9 Hotbar · ESC Pause · H Regeln.",
+      "Q Ki · X Slam · V Hagel. Aufgaben stehen oben. J öffnet die Liste.",
+      "1–9 Hotbar · I Beutel · ESC Pause · H Regeln.",
     ],
   },
   sandbox: {
@@ -81,8 +82,9 @@ export const MODE_META: Record<GameMode, { name: string; tag: string; blurb: str
     rules: [
       "Sammle sieben Kugeln für einen Wunsch.",
       "Besiege Späher, schöpfe Ki, werde Super Saiyan (F ab 4500).",
-      "Abbauen füllt das Inventar. Ohne Vorrat kein Setzen.",
+      "Abbauen füllt das Inventar. Ohne Vorrat kein Setzen. Waffen droppen von Spähern.",
       "W vor, A links, D rechts, S zurück. Shift schleichen. Strg sprinten. Leertaste hoch, Shift runter im Flug.",
+      "Linksklick schlagen · Rechtsklick schwer / setzen · Q Ki · X Slam · V Hagel.",
       "I Inventar · J Aufgaben · H Regeln · ESC Pause.",
     ],
   },
@@ -107,17 +109,21 @@ export function emptyStats(): QuestStats {
 }
 
 export function emptyInv(): number[] {
-  return Array.from({ length: BLOCK_COUNT }, () => 0);
+  return Array.from({ length: ITEM_MAX }, () => 0);
 }
 
 export function starterInv(): number[] {
   const a = emptyInv();
-  a[1] = 16; // grass
-  a[2] = 16; // dirt
-  a[3] = 12; // stone
-  a[4] = 8; // sand
-  a[5] = 10; // wood
-  a[7] = 3; // ki
+  a[1] = 16;
+  a[2] = 16;
+  a[3] = 12;
+  a[4] = 8;
+  a[5] = 10;
+  a[7] = 3;
+  a[20] = 1;
+  a[23] = 1;
+  a[25] = 2;
+  a[26] = 1;
   return a;
 }
 
@@ -128,6 +134,15 @@ export function campaignInv(): number[] {
   a[3] = 4;
   a[5] = 4;
   a[7] = 1;
+  a[20] = 1;
+  a[23] = 1;
+  a[25] = 1;
+  return a;
+}
+
+export function creativeInv(): number[] {
+  const a = emptyInv();
+  for (let i = 1; i < a.length; i++) a[i] = 99;
   return a;
 }
 

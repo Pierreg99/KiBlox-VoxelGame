@@ -6,7 +6,7 @@ Kein Versprechen auf Termine. Reihenfolge = Nutzen fürs Spielgefühl.
 
 Orbit-Saga: fünf Welten, sechs Völker, Story, Bosse, Sternentor.
 Singleplayer-Voxel-Loop: bauen, Ki-Flug, sieben Kugeln, Orryx-Wünsche.
-Save lokal (`kiblox-save-v5`).
+Save lokal (`kiblox-save-v7`).
 
 ## Als Nächstes
 

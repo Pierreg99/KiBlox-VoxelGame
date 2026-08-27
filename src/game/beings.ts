@@ -450,16 +450,18 @@ export function poseBeing(
     const kneeR = Math.max(0, Math.sin(walkT)) * amp * 0.7;
     const bob = state.grounded ? Math.abs(Math.sin(walkT)) * amp * 0.045 : 0;
     if (state.attacking) {
+      const sw = Math.sin(t * 16);
       if (leftArm) {
-        leftArm.rotation.x = 0.35;
-        leftArm.rotation.z = -0.25;
+        leftArm.rotation.x = 0.25;
+        leftArm.rotation.z = -0.32;
       }
       if (rightArm) {
-        rightArm.rotation.x = -1.65;
-        rightArm.rotation.z = 0.12;
+        rightArm.rotation.x = -1.75 + sw * 0.55;
+        rightArm.rotation.z = 0.18;
+        rightArm.rotation.y = sw * 0.35;
       }
       if (leftFore) leftFore.rotation.x = 0.4;
-      if (rightFore) rightFore.rotation.x = -0.35;
+      if (rightFore) rightFore.rotation.x = -0.45 + sw * 0.2;
     } else {
       if (leftArm) {
         leftArm.rotation.x = swing;
@@ -508,6 +510,9 @@ export function makeViewArms() {
   const skin = matCol(0xe8c8a4);
   const gi = matCol(0xf2ead8);
   const band = matCol(0xb03a2e);
+  const steel = matCol(0xc8d0d4, 0x8a9098, 0.15);
+  const wrap = matCol(0x6a4a28);
+  const kiBlue = matCol(0x7ec8e8, 0x3a88a8, 0.45);
   const arm = (side: number) => {
     const g = new THREE.Group();
     const upper = boxMesh(0.14, 0.32, 0.14, gi, 0, -0.12, 0);
@@ -519,7 +524,45 @@ export function makeViewArms() {
     const cuff = boxMesh(0.15, 0.07, 0.15, band, 0, -0.26, 0);
     const fist = boxMesh(0.15, 0.14, 0.17, skin, 0, -0.36, -0.02);
     fist.name = "fist";
-    fore.add(lower, cuff, fist);
+    const kit = new THREE.Group();
+    kit.name = "kit";
+    kit.position.set(0, -0.36, -0.02);
+
+    const sword = new THREE.Group();
+    sword.name = "sword";
+    sword.add(
+      boxMesh(0.05, 0.08, 0.18, wrap, 0, 0, 0.02),
+      boxMesh(0.035, 0.035, 0.72, steel, 0, 0, -0.38),
+      boxMesh(0.16, 0.025, 0.04, steel, 0, 0, -0.04),
+    );
+    sword.visible = false;
+
+    const staff = new THREE.Group();
+    staff.name = "staff";
+    staff.add(
+      boxMesh(0.045, 0.045, 0.95, wrap, 0, 0, -0.2),
+      boxMesh(0.09, 0.09, 0.09, kiBlue, 0, 0, -0.68),
+    );
+    staff.visible = false;
+
+    const pick = new THREE.Group();
+    pick.name = "pick";
+    pick.add(
+      boxMesh(0.04, 0.04, 0.55, wrap, 0, 0, -0.18),
+      boxMesh(0.28, 0.07, 0.08, steel, 0, 0, -0.42),
+    );
+    pick.visible = false;
+
+    const cannon = new THREE.Group();
+    cannon.name = "cannon";
+    cannon.add(
+      boxMesh(0.18, 0.16, 0.28, steel, 0, 0.02, -0.16),
+      boxMesh(0.1, 0.1, 0.34, kiBlue, 0, 0.02, -0.38),
+    );
+    cannon.visible = false;
+
+    kit.add(sword, staff, pick, cannon);
+    fore.add(lower, cuff, fist, kit);
     g.add(upper, fore);
     g.position.set(side * 0.38, -0.22, -0.48);
     g.rotation.x = 0.42;
@@ -528,6 +571,18 @@ export function makeViewArms() {
     return g;
   };
   return { left: arm(-1), right: arm(1) };
+}
+
+export type AttackAnim = "jab" | "hook" | "upper" | "slash" | "thrust" | "smash" | "slam" | "beam";
+
+export function setViewWeapon(fists: { left: THREE.Group; right: THREE.Group }, id: number) {
+  const kit = fists.right.getObjectByName("kit") as THREE.Group | undefined;
+  const fist = fists.right.getObjectByName("fist") as THREE.Mesh | undefined;
+  if (!kit) return;
+  const want =
+    id === 21 ? "sword" : id === 22 ? "staff" : id === 23 ? "pick" : id === 24 ? "cannon" : "";
+  for (const c of kit.children) c.visible = c.name === want;
+  if (fist) fist.visible = !want;
 }
 
 export function poseViewArms(
@@ -541,27 +596,58 @@ export function poseViewArms(
   lookSwayX = 0,
   lookSwayY = 0,
   crouch = false,
+  anim: AttackAnim = "jab",
+  punchDur = 0.22,
 ) {
-  const punch = punchT > 0 ? Math.sin((punchT / 0.22) * Math.PI) : 0;
+  const u = punchDur > 0.001 ? Math.max(0, Math.min(1, punchT / punchDur)) : 0;
+  const punch = u > 0 ? Math.sin(u * Math.PI) : 0;
   const walk = grounded && !flying ? Math.sin(bob) : 0;
   const dip = crouch ? -0.1 : 0;
+  const reach =
+    anim === "thrust" || anim === "slash"
+      ? 0.58
+      : anim === "slam"
+        ? 0.22
+        : anim === "smash"
+          ? 0.5
+          : anim === "beam"
+            ? 0.62
+            : 0.42;
+  const lift =
+    anim === "upper" ? 0.18 : anim === "slam" ? 0.28 : anim === "slash" ? 0.12 : anim === "hook" ? 0.06 : anim === "beam" ? 0.08 : 0;
   fists.right.position.set(
-    0.38 + lookSwayX * 0.14,
-    -0.22 + dip + walk * 0.02 - lookSwayY * 0.1,
-    -0.48 - punch * 0.42,
+    0.38 + lookSwayX * 0.14 + (anim === "hook" ? punch * 0.12 : 0),
+    -0.22 + dip + walk * 0.02 - lookSwayY * 0.1 + lift * punch,
+    -0.48 - punch * reach,
   );
   fists.left.position.set(
     -0.38 + lookSwayX * 0.14,
     -0.22 + dip - walk * 0.02 - lookSwayY * 0.1,
-    -0.48 - punch * 0.12,
+    -0.48 - punch * (anim === "jab" ? 0.12 : 0.2),
   );
-  fists.right.rotation.x = 0.42 - punch * 1.05 - lookSwayY * 0.35;
-  fists.left.rotation.x = 0.42 - punch * 0.28 - lookSwayY * 0.25;
-  fists.right.rotation.y = lookSwayX * 0.2;
+  const rx =
+    anim === "slash"
+      ? 0.15 - punch * 1.55
+      : anim === "thrust"
+        ? 0.08 - punch * 0.7
+        : anim === "slam"
+          ? 1.15 - punch * 1.8
+          : anim === "smash"
+            ? 0.2 - punch * 1.35
+            : anim === "upper"
+              ? 0.55 - punch * 1.7
+              : anim === "beam"
+                ? 0.05 - punch * 0.45
+                : 0.42 - punch * 1.05;
+  fists.right.rotation.x = rx - lookSwayY * 0.35;
+  fists.left.rotation.x =
+    (anim === "beam" ? 0.08 - punch * 0.4 : 0.42 - punch * 0.28) - lookSwayY * 0.25;
+  fists.right.rotation.y = lookSwayX * 0.2 + (anim === "slash" ? punch * 0.9 : anim === "hook" ? punch * 0.7 : 0);
   fists.left.rotation.y = lookSwayX * 0.2;
+  fists.right.rotation.z = anim === "slash" ? punch * 0.55 : anim === "slam" ? -punch * 0.4 : anim === "beam" ? 0.04 : 0.12;
   const rf = fists.right.getObjectByName("forearmG") as THREE.Group | undefined;
   const lf = fists.left.getObjectByName("forearmG") as THREE.Group | undefined;
-  if (rf) rf.rotation.x = -punch * 0.45;
+  if (rf) rf.rotation.x = -punch * (anim === "thrust" ? 0.15 : 0.45);
   if (lf) lf.rotation.x = -punch * 0.12;
   const glow = superSaiyan ? 0xe8b923 : charge > 0.05 ? 0xc8f4ff : 0xe8c8a4;
   const paint = (root: THREE.Group) => {
@@ -570,6 +656,12 @@ export function poseViewArms(
   };
   paint(fists.right);
   paint(fists.left);
+  const kit = fists.right.getObjectByName("kit") as THREE.Group | undefined;
+  if (kit) {
+    kit.rotation.x =
+      anim === "slash" ? punch * 0.6 : anim === "thrust" ? -punch * 0.25 : anim === "beam" ? -punch * 0.15 : 0;
+    kit.rotation.z = anim === "slash" ? punch * 0.35 : 0;
+  }
   fists.right.scale.setScalar(1.15 + charge * 0.35);
   fists.left.scale.setScalar(1.15 + charge * 0.2);
 }

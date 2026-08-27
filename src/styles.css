@@ -533,6 +533,45 @@
   --vox-l: var(--color-block-stone);
   --vox-r: #5a6260;
 }
+.vox[data-vox="fist"] {
+  --vox-t: #f0d0b0;
+  --vox-l: #d4a07a;
+  --vox-r: #8a5a40;
+}
+.vox[data-vox="sword"] {
+  --vox-t: #e8f0f4;
+  --vox-l: #8aa0b0;
+  --vox-r: #3a4a54;
+}
+.vox[data-vox="staff"] {
+  --vox-t: #7ec8e8;
+  --vox-l: #6a4a28;
+  --vox-r: #2a8898;
+}
+.vox[data-vox="pick"] {
+  --vox-t: #c8d0d4;
+  --vox-l: #6a4a28;
+  --vox-r: #4a5058;
+}
+.vox[data-vox="cannon"] {
+  --vox-t: #9ee8f0;
+  --vox-l: #6a7278;
+  --vox-r: #2a8898;
+}
+.vox[data-vox="bean"] {
+  --vox-t: #d4f08a;
+  --vox-l: #5a8a28;
+  --vox-r: #3a5e18;
+}
+.vox[data-vox="vial"] {
+  --vox-t: #c8f4ff;
+  --vox-l: #3a88a8;
+  --vox-r: #1a4050;
+}
+.vox-gear {
+  border-radius: 2px 2px 1px 1px;
+  outline-width: 2px;
+}
 
 @keyframes toast-in {
   from {
