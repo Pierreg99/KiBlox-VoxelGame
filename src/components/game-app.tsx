@@ -18,21 +18,24 @@ import { useHud } from "@/game/store";
 export function GameApp() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
-  const [ready, setReady] = useState(false);
+  const [fail, setFail] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let cancelled = false;
     let engine: GameEngine | null = null;
-    void import("@/game/engine").then(({ GameEngine }) => {
-      if (cancelled || !canvasRef.current) return;
-      engine = new GameEngine(canvasRef.current);
-      engineRef.current = engine;
-      void engine.start().then(() => {
-        if (!cancelled) setReady(true);
+    void import("@/game/engine")
+      .then(({ GameEngine }) => {
+        if (cancelled || !canvasRef.current) return;
+        engine = new GameEngine(canvasRef.current);
+        engineRef.current = engine;
+        return engine.start();
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setFail(true);
       });
-    });
     return () => {
       cancelled = true;
       engine?.dispose();
@@ -48,17 +51,19 @@ export function GameApp() {
         className="absolute inset-0 h-full w-full touch-none"
         onContextMenu={(e) => e.preventDefault()}
       />
-      <Hud engineRef={engineRef} ready={ready} />
+      <Hud engineRef={engineRef} fail={fail} onRetry={() => window.location.reload()} />
     </div>
   );
 }
 
 function Hud({
   engineRef,
-  ready,
+  fail,
+  onRetry,
 }: {
   engineRef: RefObject<GameEngine | null>;
-  ready: boolean;
+  fail: boolean;
+  onRetry: () => void;
 }) {
   const hud = useHud();
   const e = () => engineRef.current;
@@ -67,8 +72,10 @@ function Hud({
     <>
       {(hud.phase === "playing" || hud.phase === "paused") && <PlayHud engineRef={engineRef} />}
       {hud.phase === "playing" && hud.isTouch && <TouchPad engineRef={engineRef} />}
-      {hud.phase === "loading" && <LoadingOverlay progress={hud.loadProgress} />}
-      {hud.phase === "title" && <TitleOverlay engine={e} ready={ready} />}
+      {hud.phase === "loading" && (
+        <LoadingOverlay progress={hud.loadProgress} fail={fail} onRetry={onRetry} />
+      )}
+      {hud.phase === "title" && <TitleOverlay engine={e} />}
       {hud.phase === "paused" && <PauseOverlay engine={e} />}
       {hud.phase === "wish" && <WishOverlay engine={e} />}
       {hud.phase === "dead" && <DeadOverlay engine={e} />}
@@ -243,24 +250,46 @@ function DragonRadar() {
   );
 }
 
-function LoadingOverlay({ progress }: { progress: number }) {
+function LoadingOverlay({
+  progress,
+  fail,
+  onRetry,
+}: {
+  progress: number;
+  fail: boolean;
+  onRetry: () => void;
+}) {
   return (
     <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-bg">
       <p className="font-display text-5xl tracking-wide text-fg">KI BLOX</p>
-      <p className="mt-2 text-sm text-muted">Die Welt nimmt Form an</p>
-      <div className="mt-8 h-1.5 w-56 overflow-hidden rounded-full bg-raised">
-        <div className="h-full bg-accent" style={{ width: `${Math.round(progress * 100)}%` }} />
-      </div>
+      {fail ? (
+        <>
+          <p className="mt-2 text-sm text-muted">Die Welt konnte nicht geladen werden.</p>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="mt-6 h-11 rounded-lg bg-accent px-5 font-display text-xl tracking-wide text-accent-fg"
+          >
+            Erneut versuchen
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="mt-2 text-sm text-muted">Die Welt nimmt Form an</p>
+          <div className="mt-8 h-1.5 w-56 overflow-hidden rounded-full bg-raised">
+            <div className="h-full bg-accent" style={{ width: `${Math.round(progress * 100)}%` }} />
+          </div>
+          <p className="hud-num mt-2 text-xs text-subtle">{Math.round(progress * 100)}%</p>
+        </>
+      )}
     </div>
   );
 }
 
 function TitleOverlay({
   engine,
-  ready,
 }: {
   engine: () => GameEngine | null;
-  ready: boolean;
 }) {
   const hud = useHud();
   return (
@@ -268,7 +297,7 @@ function TitleOverlay({
       <img
         src="/game/title.jpg"
         alt=""
-        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-55"
       />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,var(--color-bg)_0%,transparent_52%)] sm:bg-[linear-gradient(to_top,color-mix(in_oklab,var(--color-bg)_78%,transparent)_0%,transparent_58%)]" />
       <div className="relative w-full max-w-md rounded-xl bg-surface/80 p-5 shadow-panel ring-1 ring-border backdrop-blur-sm sm:p-8">
@@ -280,16 +309,14 @@ function TitleOverlay({
         <div className="mt-5 flex flex-col gap-2 sm:mt-6">
           <button
             type="button"
-            disabled={!ready}
             onClick={() => engine()?.playFromTitle("continue")}
-            className="h-12 rounded-lg bg-accent px-5 font-display text-2xl tracking-wide text-accent-fg transition-transform duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
+            className="h-12 rounded-lg bg-accent px-5 font-display text-2xl tracking-wide text-accent-fg transition-transform duration-150 hover:brightness-110 active:scale-[0.98]"
           >
             {hud.hasSave ? "Fortsetzen" : "Spielen"}
           </button>
           {hud.hasSave && (
             <button
               type="button"
-              disabled={!ready}
               onClick={() => engine()?.playFromTitle("new")}
               className="h-11 rounded-lg bg-raised px-5 text-sm font-medium text-fg ring-1 ring-border transition-opacity hover:opacity-90"
             >
@@ -298,7 +325,6 @@ function TitleOverlay({
           )}
           <button
             type="button"
-            disabled={!ready}
             onClick={() => void engine()?.newWorld()}
             className="h-11 rounded-lg px-5 text-sm font-medium text-muted hover:text-fg"
           >

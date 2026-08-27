@@ -67,6 +67,13 @@ function disk(dx: number, dz: number, r: number) {
   return dx * dx + dz * dz <= r * r + 0.45;
 }
 
+function yieldThread() {
+  return new Promise<void>((resolve) => {
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 0);
+  });
+}
+
 export class World {
   data: Uint8Array;
   seed: number;
@@ -104,7 +111,7 @@ export class World {
     return b !== AIR && b !== LEAVES && b !== WATER && b !== CLOUD;
   }
 
-  generate() {
+  async generate(onProgress?: (p: number) => void, aborted?: () => boolean) {
     const rngT = makeRng(this.seed, 0x11);
     const rngC = makeRng(this.seed, 0x22);
     const rngE = makeRng(this.seed, 0x33);
@@ -149,6 +156,11 @@ export class World {
         moistA[x + z * SX] = moist;
         elevA[x + z * SX] = elev;
       }
+      if ((z & 15) === 15) {
+        onProgress?.(0.04 + (z / SZ) * 0.2);
+        if (aborted?.()) return;
+        await yieldThread();
+      }
     }
 
     for (let r = 0; r < 6; r++) {
@@ -189,13 +201,17 @@ export class World {
         }
       }
     }
+    if (aborted?.()) return;
+    onProgress?.(0.26);
+    await yieldThread();
 
     for (let z = 0; z < SZ; z++) {
       for (let x = 0; x < SX; x++) {
         const h = height[x + z * SX]!;
         const moist = moistA[x + z * SX]!;
         const elev = elevA[x + z * SX]!;
-        for (let y = 0; y < SY; y++) {
+        const yTop = Math.max(h, SEA_LEVEL);
+        for (let y = 0; y <= yTop; y++) {
           let id = AIR;
           if (y === 0) id = BEDROCK;
           else if (y < h - 5) {
@@ -218,6 +234,11 @@ export class World {
           if (id === AIR && y <= SEA_LEVEL && y > 0) id = WATER;
           this.data[idx(x, y, z)] = id;
         }
+      }
+      if ((z & 3) === 3) {
+        onProgress?.(0.26 + (z / SZ) * 0.5);
+        if (aborted?.()) return;
+        await yieldThread();
       }
     }
 
@@ -566,6 +587,7 @@ export class World {
         kind,
       });
     }
+    onProgress?.(1);
   }
 
   surfaceY(x: number, z: number) {

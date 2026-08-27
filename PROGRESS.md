@@ -2,14 +2,14 @@
 
 Letzte Aktualisierung: 2026-08-27.
 
-Das Spiel ist **spielbar**. v0.4: eigene Atlas-Texturen, dichtere Karte, straffere Bewegung.
+Das Spiel ist **spielbar**. v0.4.1: Welt rendert nach Spielen, Ladebalken läuft während der Generierung.
 
 ## Status
 
 | Bereich | Stand |
 |---------|-------|
 | Titel / Laden / Pause / Tod / Wunsch | Fertig |
-| Voxel-Welt + Chunk-Meshing + Bloom | Fertig |
+| Voxel-Welt + Chunk-Meshing | Fertig |
 | FPS-Bewegung, Ki-Flug Blick, Snap, Step-up | Fertig |
 | localStorage Save v4 | Fertig |
 | Bauen / Abbauen, Hotbar Desktop + Touch | Fertig |

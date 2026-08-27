@@ -1,8 +1,4 @@
 import * as THREE from "three";
-import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
-import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import {
   AIR,
   BALL_COUNT,
@@ -135,8 +131,6 @@ export class GameEngine {
   private orbs: Orb[] = [];
   private shenron: THREE.Group | null = null;
   private sun: THREE.DirectionalLight;
-  private composer: EffectComposer;
-  private bloomPass: UnrealBloomPass;
   private sky: THREE.Mesh;
   private clouds: THREE.Mesh[] = [];
   energy = MAX_ENERGY;
@@ -196,7 +190,8 @@ export class GameEngine {
       canvas,
       antialias: true,
       alpha: false,
-      powerPreference: "high-performance",
+      powerPreference: "default",
+      failIfMajorPerformanceCaveat: false,
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setClearColor(0x79c9c2, 1);
@@ -227,12 +222,6 @@ export class GameEngine {
       map: this.atlas,
       vertexColors: true,
     });
-
-    this.composer = new EffectComposer(this.renderer);
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(800, 600), 0.42, 0.5, 0.86);
-    this.composer.addPass(this.bloomPass);
-    this.composer.addPass(new OutputPass());
 
     const hGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.02, 1.02, 1.02));
     this.highlight = new THREE.LineSegments(
@@ -307,12 +296,14 @@ export class GameEngine {
   }
 
   async start() {
+    if (this.disposed) return;
     const [atlas, skyTex, kiTex, ballImg] = await Promise.all([
       loadAtlasTexture(),
       loadGameTexture("/game/sky.jpg"),
       loadGameTexture("/game/ki-orb.png"),
       loadHtmlImage("/game/ball.png"),
     ]);
+    if (this.disposed) return;
     this.atlas.dispose();
     this.atlas = atlas;
     this.terrainMat.map = atlas;
@@ -329,7 +320,12 @@ export class GameEngine {
     }
     useHud.getState().patch({ loadProgress: 0.08 });
     await yieldFrame();
-    this.world.generate();
+    if (this.disposed) return;
+    await this.world.generate(
+      (p) => useHud.getState().patch({ loadProgress: 0.08 + p * 0.34 }),
+      () => this.disposed,
+    );
+    if (this.disposed) return;
     if (existing) {
       this.world.applyEdits(existing.edits);
       this.edits = existing.edits.slice();
@@ -355,8 +351,9 @@ export class GameEngine {
       this.pitch = -0.22;
     }
     this.unstuck();
-    useHud.getState().patch({ loadProgress: 0.18 });
+    useHud.getState().patch({ loadProgress: 0.44 });
     await this.buildAllChunks();
+    if (this.disposed) return;
     this.spawnEntities();
     this.meshed = true;
     useHud.getState().patch({
@@ -371,6 +368,8 @@ export class GameEngine {
       hasSave: hasSave(),
     });
     this.last = performance.now();
+    this.titleCam();
+    this.render(0);
     const loop = (now: number) => {
       if (this.disposed) return;
       this.raf = requestAnimationFrame(loop);
@@ -722,7 +721,11 @@ export class GameEngine {
     const seed = this.world.seed;
     this.clearChunks();
     this.world = new World(seed);
-    this.world.generate();
+    await this.world.generate(
+      (p) => useHud.getState().patch({ loadProgress: 0.08 + p * 0.4 }),
+      () => this.disposed,
+    );
+    if (this.disposed) return;
     this.edits = [];
     this.resetAvatar();
     await this.buildAllChunks();
@@ -786,7 +789,11 @@ export class GameEngine {
     useHud.getState().patch({ phase: "loading", loadProgress: 0.05, hasSave: false });
     this.clearChunks();
     this.world = new World((Math.random() * 1e9) | 0);
-    this.world.generate();
+    await this.world.generate(
+      (p) => useHud.getState().patch({ loadProgress: 0.05 + p * 0.4 }),
+      () => this.disposed,
+    );
+    if (this.disposed) return;
     this.edits = [];
     this.resetAvatar();
     await this.buildAllChunks();
@@ -1933,7 +1940,7 @@ export class GameEngine {
 
   private render(_dt: number) {
     this.sky.position.copy(this.camera.position);
-    this.composer.render();
+    this.renderer.render(this.scene, this.camera);
   }
 
   private resize() {
@@ -1942,8 +1949,6 @@ export class GameEngine {
     this.camera.aspect = w / Math.max(1, h);
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
-    this.composer.setSize(w, h);
-    this.bloomPass.setSize(w, h);
   }
 
   flushSave() {
@@ -2074,7 +2079,6 @@ export class GameEngine {
     (this.highlight.material as THREE.Material).dispose();
     this.sky.geometry.dispose();
     (this.sky.material as THREE.Material).dispose();
-    this.composer.dispose();
     this.renderer.dispose();
     window.__controlsTest = undefined;
   }

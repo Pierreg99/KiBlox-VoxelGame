@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 — 2026-08-27
+
+- World actually draws after Spielen (direct renderer, no bloom pass that went black)
+- Load bar moves while the island generates; Spielen is ready as soon as the title is up
+
 ## 0.4.0 — 2026-08-27
 
 - Original block atlas: cube-face grass sides (not mini-landscapes), crystal grain, path, even water/stone
