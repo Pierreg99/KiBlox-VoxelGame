@@ -427,10 +427,17 @@ function WishOverlay({ engine }: { engine: () => GameEngine | null }) {
 
 function StoryOverlay({ engine }: { engine: () => GameEngine | null }) {
   const hud = useHud();
+  const next = () => engine()?.advanceStory();
   return (
-    <div className="absolute inset-0 z-40 flex items-end justify-center bg-bg/40 px-5 pb-8 sm:items-center sm:pb-0">
-      <div className="w-full max-w-lg rounded-xl bg-surface/90 p-5 shadow-panel ring-1 ring-border backdrop-blur-sm sm:p-6">
-        <div className="flex gap-4">
+    <div
+      className="absolute inset-0 z-40 flex items-end justify-center bg-bg/40 px-5 pb-8 sm:items-center sm:pb-0"
+      onClick={next}
+    >
+      <div
+        className="relative z-10 w-full max-w-lg rounded-xl bg-surface/90 p-5 shadow-panel ring-1 ring-border backdrop-blur-sm sm:p-6"
+        onClick={next}
+      >
+        <div className="pointer-events-none flex gap-4">
           {hud.storyPortrait ? (
             <img
               src={hud.storyPortrait}
@@ -445,8 +452,11 @@ function StoryOverlay({ engine }: { engine: () => GameEngine | null }) {
         </div>
         <button
           type="button"
-          className="relative z-10 mt-4 h-11 w-full rounded-lg bg-accent font-display text-2xl text-accent-fg"
-          onClick={() => engine()?.advanceStory()}
+          className="relative z-20 mt-4 h-11 w-full rounded-lg bg-accent font-display text-2xl text-accent-fg"
+          onClick={(e) => {
+            e.stopPropagation();
+            next();
+          }}
         >
           Weiter
         </button>

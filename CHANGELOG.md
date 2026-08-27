@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.1 — 2026-08-27
+
+- Characters: Minecraft 32px / 1.8 m humanoids, painted pixel faces/gi, jointed walk-run-fly-punch
+- Species silhouettes: Solari spikes, Veldari antennae, Cryon crystals, Automata visor, Thrynn horns, Aetheri bun
+- Title orbit shows the Solari hero walking; FPS gi-arms with punch follow-through
+- Fall-Fix: sticky AABB support (no 1-block speckles), snap-to-floor, fall-speed cap, void rescue without bedrock clamp
+- Leaves walkable; denser tree canopies; surface pits filled
+- Enemies use the same support snap so they stop dropping through edges
+- Docs: README, PLAN, QUALITY, PROGRESS, ROADMAP, NOTICE aligned to v0.5.1 / Orbit-Saga
+
 ## 0.5.0 — 2026-08-27
 
 - Orbit-Saga: five original worlds (Verdant, Terra, Cinder, Rime, Aether)

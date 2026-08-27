@@ -143,7 +143,7 @@ export class World {
 
   isSolid(x: number, y: number, z: number) {
     const b = this.get(x, y, z);
-    return b !== AIR && b !== LEAVES && b !== WATER && b !== LAVA;
+    return b !== AIR && b !== WATER && b !== LAVA;
   }
 
   isOpaque(x: number, y: number, z: number) {
@@ -297,6 +297,26 @@ export class World {
       }
     }
 
+    // Seal 1-block surface pits so walking doesn't drop through speckles.
+    for (let z = 1; z < SZ - 1; z++) {
+      for (let x = 1; x < SX - 1; x++) {
+        const h = height[x + z * SX]!;
+        if (h <= 1) continue;
+        const here = this.get(x, h, z);
+        if (here !== AIR && here !== WATER && here !== LAVA) continue;
+        let n = 0;
+        for (const [ox, oz] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ] as const) {
+          if (this.isSolid(x + ox, h, z + oz)) n++;
+        }
+        if (n >= 3) this.set(x, h, z, P.surface);
+      }
+    }
+
     for (let z = 2; z < SZ - 2; z += 2) {
       for (let x = 2; x < SX - 2; x += 2) {
         const h = height[x + z * SX]!;
@@ -382,16 +402,21 @@ export class World {
       }
       const top = h + treeH;
       const rad = giant ? 6 : 4;
-      for (let dy = 0; dy <= 2; dy++) {
-        const r = rad - dy;
+      for (let dy = -1; dy <= 3; dy++) {
+        const r = Math.max(2, rad - Math.abs(dy) - (dy < 0 ? 1 : 0));
         for (let dz = -r; dz <= r; dz++) {
           for (let dx = -r; dx <= r; dx++) {
-            if (!disk(dx, dz, r - 0.2)) continue;
+            if (!disk(dx, dz, r + 0.15)) continue;
             const lx = x + dx;
             const ly = top + dy;
             const lz = z + dz;
             if (this.get(lx, ly, lz) === AIR) this.set(lx, ly, lz, LEAVES);
           }
+        }
+      }
+      for (let dz = -2; dz <= 2; dz++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          if (this.get(x + dx, top, z + dz) === AIR) this.set(x + dx, top, z + dz, LEAVES);
         }
       }
     }
@@ -815,11 +840,11 @@ export function aabbHitsWorld(
   h: number,
 ) {
   const minX = Math.floor(x - hw);
-  const maxX = Math.floor(x + hw);
-  const minY = Math.floor(y);
+  const maxX = Math.floor(x + hw - 1e-6);
+  const minY = Math.floor(y + 1e-4);
   const maxY = Math.floor(y + h - 1e-4);
   const minZ = Math.floor(z - hw);
-  const maxZ = Math.floor(z + hw);
+  const maxZ = Math.floor(z + hw - 1e-6);
   for (let iy = minY; iy <= maxY; iy++) {
     for (let iz = minZ; iz <= maxZ; iz++) {
       for (let ix = minX; ix <= maxX; ix++) {
@@ -828,4 +853,25 @@ export function aabbHitsWorld(
     }
   }
   return false;
+}
+
+/** Highest solid top (blockY+1) under an XZ AABB, searching down from fromY. */
+export function supportY(world: World, px: number, pz: number, fromY: number, hw: number) {
+  const minX = Math.floor(px - hw);
+  const maxX = Math.floor(px + hw - 1e-6);
+  const minZ = Math.floor(pz - hw);
+  const maxZ = Math.floor(pz + hw - 1e-6);
+  const y0 = Math.min(SY - 2, Math.max(0, Math.floor(fromY)));
+  let best = -Infinity;
+  for (let x = minX; x <= maxX; x++) {
+    for (let z = minZ; z <= maxZ; z++) {
+      for (let y = y0; y >= 0; y--) {
+        if (world.isSolid(x, y, z)) {
+          if (y + 1 > best) best = y + 1;
+          break;
+        }
+      }
+    }
+  }
+  return best === -Infinity ? null : best;
 }

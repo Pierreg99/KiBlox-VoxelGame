@@ -2,7 +2,7 @@
 
 Letzte Aktualisierung: 2026-08-27.
 
-Das Spiel ist **spielbar**. v0.5: Orbit-Saga, fünf Welten, sechs Völker, Story + Bosse.
+Das Spiel ist **spielbar**. v0.5.1: Orbit-Saga, Fall-Fix, Minecraft-Humanoids mit Ki-Animation.
 
 ## Status
 
@@ -10,11 +10,13 @@ Das Spiel ist **spielbar**. v0.5: Orbit-Saga, fünf Welten, sechs Völker, Story
 |---------|-------|
 | Titel / Laden / Pause / Tod / Wunsch | Fertig |
 | Voxel-Welt + Chunk-Meshing | Fertig |
-| FPS-Bewegung, Ki-Flug Blick, Snap, Step-up | Fertig |
-| localStorage Save v4 | Fertig |
+| FPS-Bewegung, Ki-Flug Blick, Snap, Step-up, Void-Rescue | Fertig |
+| localStorage Save v5 | Fertig |
 | Bauen / Abbauen, Hotbar Desktop + Touch | Fertig |
 | Ki-Kampf, Dash, Super Saiyan | Fertig |
-| Drachenkugeln + Shenron-Wünsche | Fertig |
+| Drachenkugeln + Orryx-Wünsche | Fertig |
+| Kampagne 5 Welten / 6 Völker / Story / Bosse | Fertig |
+| Humanoids + Walk/Fly/Punch | Fertig |
 | Touch-Sticks + Gamepad | Fertig |
 | Auth / DB / Multiplayer | Aus, absichtlich |
 | Tests (Playwright-Smoke intern) | Manuell + Smoke, keine CI-Matrix |
@@ -24,17 +26,18 @@ Das Spiel ist **spielbar**. v0.5: Orbit-Saga, fünf Welten, sechs Völker, Story
 ### Welt & Grafik
 
 - 128×80×128 Terrain, Schirmbäume, Lehm-Kuppeln, Zikkurat, Pfade, Wasserfälle, Ki-Haine
-- 16³-Chunks, Ambient Occlusion, Atlas-Texturen, Bloom
+- 16³-Chunks, Ambient Occlusion, Atlas-Texturen (kein Bloom)
 - Drachenkugeln mit Sternen, Shenron-Modell (prozedural)
-- Gegner: grunt, shooter, flyer
+- Gegner: grunt, shooter, flyer, brute, elite, lord — Pixel-Humanoids
+- Dichte Baumkronen, zugeschlossene 1-Block-Löcher, begehbare Blätter
 
 ### Loop
 
 - Ki sammeln (Kristalle, Kämpfe), Super Saiyan ab 4500
-- Sieben Kugeln → Wunsch: Kraft / Heilen / Neue Jagd
+- Sieben Kugeln → Wunsch: Kraft / Heilen / Neue Jagd / Tor
 - Neue Jagd **verstreut** die Kugeln wirklich (`scatterBalls`)
 - Tod → Respawn am Nest, Ki bleibt
-- Save: Position, Blick, Power, HP, Energie, Flug, SSJ, Kugeln, Edits
+- Save v5: Position, Blick, Power, HP, Energie, Flug, SSJ, Kugeln, Edits, Kampagne
 
 ### Steuerung (v0.2, die wichtige Runde)
 
@@ -55,14 +58,14 @@ Das Spiel ist **spielbar**. v0.5: Orbit-Saga, fünf Welten, sechs Völker, Story
 
 | | |
 |---|---|
-| Kern (`src/game` + HUD) | ~4.1k Zeilen |
-| Engine | ~1.9k Zeilen |
-| Save-Key | `kiblox-save-v2` |
-| Gegner-Spawns | bis 16 |
+| Kern (`src/game` + HUD) | ~4.5k Zeilen |
+| Engine | ~2.0k Zeilen |
+| Save-Key | `kiblox-save-v5` |
+| Gegner-Spawns | bis 24 + Boss |
 | Drachenkugeln | 7 |
 | Edit-Cap im Save | 2500 |
 
 ## Offen (kein Blocker zum Spielen)
 
-Siehe [`ROADMAP.md`](./ROADMAP.md). Kurz: mehr Biome, bessere KI, Inventar,
+Siehe [`ROADMAP.md`](./ROADMAP.md) und [`QUALITY.md`](./QUALITY.md). Kurz: mehr Biome-Props, klarere Treffer, Inventar,
 größere Welt, optional P2P — alles nach v1.

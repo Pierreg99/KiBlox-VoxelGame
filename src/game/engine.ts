@@ -31,6 +31,7 @@ import {
   REACH,
   SAND,
   SAVE_VERSION,
+  SEA_LEVEL,
   SNAP_DOWN,
   SPRINT_SPEED,
   SSJ_MUL,
@@ -56,14 +57,14 @@ import {
   type Stage,
   type StoryLine,
 } from "./campaign";
-import { hpFor, makeBeing } from "./beings";
+import { hpFor, makeBeing, makeViewArms, poseBeing, poseViewArms } from "./beings";
 import { Input } from "./input";
 import { meshChunk } from "./mesher";
 import { clearSave, hasSave, loadSave, writeSave, type SaveData } from "./save";
 import type { Phase } from "./store";
 import { useHud } from "./store";
 import { createAtlasTexture, createBallTexture, loadAtlasTexture, loadGameTexture } from "./textures";
-import { aabbHitsWorld, chunkCoords, chunkKey, raycastVoxels, World, type EnemyKind } from "./world";
+import { aabbHitsWorld, chunkCoords, chunkKey, raycastVoxels, supportY, World, type EnemyKind } from "./world";
 
 type Enemy = {
   mesh: THREE.Group;
@@ -136,7 +137,7 @@ export class GameEngine {
   private kiOrbTex: THREE.Texture | null = null;
   private ballBase: HTMLImageElement | null = null;
   private highlight: THREE.LineSegments;
-  private fists: { left: THREE.Mesh; right: THREE.Mesh };
+  private fists: { left: THREE.Group; right: THREE.Group };
   private auraLight: THREE.PointLight;
   private ballMeshes: THREE.Mesh[] = [];
   private ballTex: THREE.CanvasTexture[] = [];
@@ -150,6 +151,7 @@ export class GameEngine {
   private sky: THREE.Mesh;
   private clouds: THREE.Mesh[] = [];
   private npcMeshes: THREE.Group[] = [];
+  private heroMesh: THREE.Group | null = null;
   campaign = false;
   planet: PlanetId = "verdant";
   stage: Stage = "intro";
@@ -257,6 +259,8 @@ export class GameEngine {
     this.scene.add(this.highlight);
 
     this.fists = this.makeFists();
+    this.fists.left.visible = false;
+    this.fists.right.visible = false;
     this.camera.add(this.fists.left);
     this.camera.add(this.fists.right);
     this.scene.add(this.camera);
@@ -587,25 +591,7 @@ export class GameEngine {
   }
 
   private makeFists() {
-    const geo = new THREE.BoxGeometry(0.11, 0.11, 0.26);
-    const mat = new THREE.MeshLambertMaterial({ color: 0xe2c8a8 });
-    const cuffM = new THREE.MeshLambertMaterial({ color: 0xeeeee8 });
-    const left = new THREE.Mesh(geo, mat);
-    const right = new THREE.Mesh(geo, mat);
-    const cuffG = new THREE.BoxGeometry(0.13, 0.13, 0.08);
-    const lc = new THREE.Mesh(cuffG, cuffM);
-    const rc = new THREE.Mesh(cuffG, cuffM);
-    lc.position.z = 0.12;
-    rc.position.z = 0.12;
-    left.add(lc);
-    right.add(rc);
-    left.position.set(-0.36, -0.34, -0.58);
-    right.position.set(0.36, -0.34, -0.58);
-    left.rotation.x = 0.22;
-    right.rotation.x = 0.22;
-    left.scale.setScalar(1.25);
-    right.scale.setScalar(1.25);
-    return { left, right };
+    return makeViewArms();
   }
 
   private spawnEntities() {
@@ -675,6 +661,21 @@ export class GameEngine {
       this.scene.add(g);
       this.npcMeshes.push(g);
     }
+
+    if (this.heroMesh) {
+      this.scene.remove(this.heroMesh);
+      this.heroMesh.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          const mat = o.material;
+          if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
+          else mat.dispose();
+        }
+      });
+    }
+    this.heroMesh = makeBeing("elite", "solari");
+    this.heroMesh.position.set(this.world.spawn.x, this.world.spawn.y, this.world.spawn.z);
+    this.scene.add(this.heroMesh);
 
     this.clearPool(this.blasts);
     this.clearPool(this.orbs);
@@ -870,9 +871,40 @@ export class GameEngine {
 
   private unstuck() {
     let n = 0;
-    while (aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H) && n < 28) {
-      this.py += 0.4;
+    while (aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H) && n < 40) {
+      this.py += 0.35;
       n++;
+    }
+  }
+
+  private supportY(px: number, pz: number, fromY: number) {
+    return supportY(this.world, px, pz, fromY, PLAYER_HW + 0.22);
+  }
+
+  private rescueFall() {
+    if (this.py >= 1.05 && !aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H)) return;
+    if (this.py >= 4) return;
+    const wet = this.world.isLiquid(Math.floor(this.px), Math.max(0, Math.floor(this.py)), Math.floor(this.pz));
+    if (wet && this.py >= 0.5) {
+      this.py = Math.max(this.py, SEA_LEVEL - 1.2);
+      if (this.vy < -6) this.vy = -6;
+      return;
+    }
+    const sx = Math.max(1, Math.min(SX - 2, Math.floor(this.px)));
+    const sz = Math.max(1, Math.min(SZ - 2, Math.floor(this.pz)));
+    const y = this.world.surfaceY(sx, sz);
+    this.vx = this.vy = this.vz = 0;
+    this.flying = false;
+    if (y > SEA_LEVEL && y < SY - 4) {
+      this.py = y + 0.05;
+      this.unstuck();
+      this.toast("Halt gefunden");
+    } else {
+      this.px = this.world.spawn.x;
+      this.py = this.world.spawn.y;
+      this.pz = this.world.spawn.z;
+      this.unstuck();
+      this.toast("Zurück vom Abgrund");
     }
   }
 
@@ -1189,6 +1221,8 @@ export class GameEngine {
     const r = 26;
     this.camera.position.set(s.x + Math.cos(t) * r, s.y + 12, s.z + Math.sin(t) * r);
     this.camera.lookAt(s.x, s.y + 3, s.z);
+    this.fists.left.visible = false;
+    this.fists.right.visible = false;
   }
 
   private forwardRight() {
@@ -1300,6 +1334,8 @@ export class GameEngine {
     }
 
     this.kiCd = Math.max(0, this.kiCd - dt);
+
+    this.kiCd = Math.max(0, this.kiCd - dt);
     this.punchCd = Math.max(0, this.punchCd - dt);
     this.placeCd = Math.max(0, this.placeCd - dt);
     this.invuln = Math.max(0, this.invuln - dt);
@@ -1370,8 +1406,9 @@ export class GameEngine {
   }
 
   private moveCollide(dt: number, swimUp: boolean) {
+    if (this.vy < -22) this.vy = -22;
     const speed = Math.hypot(this.vx, this.vy, this.vz);
-    const steps = Math.max(1, Math.ceil((speed * dt) / 0.14));
+    const steps = Math.max(1, Math.ceil((speed * dt) / 0.12));
     const sdt = dt / steps;
     let grounded = false;
     const wasGrounded = this.grounded;
@@ -1409,18 +1446,27 @@ export class GameEngine {
       const oy = this.py;
       this.py += this.vy * sdt;
       if (aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H)) {
-        this.py = oy;
-        if (this.vy <= 0) grounded = true;
+        if (this.vy <= 0) {
+          const floor = this.supportY(this.px, this.pz, oy + 0.35);
+          if (floor != null && Math.abs(oy - floor) <= 1.2) {
+            this.py = floor;
+          } else {
+            this.py = oy;
+          }
+          grounded = true;
+        } else {
+          this.py = oy;
+        }
         this.vy = 0;
       }
     }
 
     if (wasGrounded && !grounded && !this.flying && this.vy <= 0.45) {
-      for (const drop of [0.2, 0.38, SNAP_DOWN]) {
+      for (const drop of [0.2, 0.38, SNAP_DOWN, 0.85]) {
         if (aabbHitsWorld(this.world, this.px, this.py - drop, this.pz, PLAYER_HW, PLAYER_H)) {
           this.py -= drop;
-          for (let n = 0; n < 14 && aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H); n++) {
-            this.py += 0.05;
+          for (let n = 0; n < 16 && aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H); n++) {
+            this.py += 0.04;
           }
           grounded = true;
           this.vy = 0;
@@ -1429,11 +1475,41 @@ export class GameEngine {
       }
     }
 
+    if (!this.flying && this.vy <= 0.35) {
+      const floor = this.supportY(this.px, this.pz, this.py + 0.5);
+      if (floor != null) {
+        const gap = this.py - floor;
+        if (gap >= -0.12 && gap <= SNAP_DOWN + 0.22) {
+          this.py = floor;
+          grounded = true;
+          this.vy = 0;
+        }
+      }
+    }
+
+    if (grounded && aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H)) {
+      for (let n = 0; n < 5 && aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H); n++) {
+        this.py += 0.04;
+      }
+    }
+    if (aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H) && this.py < 4) {
+      const surf = this.world.surfaceY(Math.floor(this.px), Math.floor(this.pz));
+      if (surf > this.py + 0.5 && surf < SY - 4) {
+        this.py = surf + 0.02;
+        this.vy = 0;
+        grounded = true;
+      }
+    }
+
     this.grounded = grounded;
     if (grounded && this.vy <= 0) this.flying = false;
     this.px = Math.max(1.2, Math.min(SX - 1.2, this.px));
     this.pz = Math.max(1.2, Math.min(SZ - 1.2, this.pz));
-    this.py = Math.max(1, Math.min(SY - 3, this.py));
+    if (this.py > SY - 4) {
+      this.py = SY - 4;
+      if (this.vy > 0) this.vy = 0;
+    }
+    this.rescueFall();
 
     const wx = Math.floor(this.px);
     const wz = Math.floor(this.pz);
@@ -1839,27 +1915,34 @@ export class GameEngine {
         }
       }
       e.mesh.position.set(e.x, e.y, e.z);
-      e.mesh.rotation.y = Math.atan2(dx, dz);
-      if (e.kind === "flyer" || e.kind === "lord") {
-        const wing = e.mesh.getObjectByName("wing") as THREE.Mesh | undefined;
-        if (wing) wing.rotation.z = Math.sin(this.orbitT * 14) * 0.18;
+      if (e.y < 0.8) {
+        const floor = supportY(this.world, e.x, e.z, 40, 0.4);
+        e.y = floor != null ? floor : Math.max(2, this.world.surfaceY(Math.floor(e.x), Math.floor(e.z)));
+        e.vy = 0;
       }
+      e.mesh.rotation.y = Math.atan2(dx, dz);
+      const air = !this.onGround(e.x, e.y, e.z);
+      poseBeing(e.mesh, this.orbitT + e.hop, {
+        speed: Math.hypot(e.vx, e.vz),
+        flying: e.kind === "flyer" || (e.kind === "lord" && air) || air,
+        attacking: e.cooldown > 0.4,
+        grounded: !air,
+      });
     }
   }
 
   private onGround(x: number, y: number, z: number) {
-    return this.world.isSolid(Math.floor(x), Math.floor(y - 0.08), Math.floor(z));
+    const floor = supportY(this.world, x, z, y + 0.2, 0.34);
+    return floor != null && y - floor <= 0.16;
   }
 
   private moveEntity(e: Enemy, dt: number, flying: boolean) {
-    const hw = 0.28;
-    const h = flying ? 1.1 : 1.45;
+    const hw = 0.32;
+    const h = flying ? 1.1 : 1.55;
+    if (e.vy < -18) e.vy = -18;
     e.x += e.vx * dt;
     if (aabbHitsWorld(this.world, e.x, e.y, e.z, hw, h)) {
-      if (
-        !flying &&
-        !aabbHitsWorld(this.world, e.x, e.y + 1.05, e.z, hw, h)
-      ) {
+      if (!flying && !aabbHitsWorld(this.world, e.x, e.y + 1.05, e.z, hw, h)) {
         e.y += 1.05;
       } else {
         e.x -= e.vx * dt;
@@ -1868,10 +1951,7 @@ export class GameEngine {
     }
     e.z += e.vz * dt;
     if (aabbHitsWorld(this.world, e.x, e.y, e.z, hw, h)) {
-      if (
-        !flying &&
-        !aabbHitsWorld(this.world, e.x, e.y + 1.05, e.z, hw, h)
-      ) {
+      if (!flying && !aabbHitsWorld(this.world, e.x, e.y + 1.05, e.z, hw, h)) {
         e.y += 1.05;
       } else {
         e.z -= e.vz * dt;
@@ -1881,7 +1961,17 @@ export class GameEngine {
     e.y += e.vy * dt;
     if (aabbHitsWorld(this.world, e.x, e.y, e.z, hw, h)) {
       e.y -= e.vy * dt;
+      if (e.vy <= 0) {
+        const floor = supportY(this.world, e.x, e.z, e.y + 0.4, hw + 0.2);
+        if (floor != null && e.y - floor < 1.1) e.y = floor;
+      }
       e.vy = 0;
+    } else if (!flying && e.vy <= 0) {
+      const floor = supportY(this.world, e.x, e.z, e.y + 0.3, hw + 0.2);
+      if (floor != null && e.y - floor >= -0.08 && e.y - floor <= 0.7) {
+        e.y = floor;
+        e.vy = 0;
+      }
     }
   }
 
@@ -2082,6 +2172,25 @@ export class GameEngine {
       c.position.x += dt * 0.42;
       if (c.position.x > SX + 16) c.position.x = -12;
     }
+    for (let i = 0; i < this.npcMeshes.length; i++) {
+      const n = this.world.npcs[i];
+      const m = this.npcMeshes[i];
+      if (!n || !m) continue;
+      m.position.set(n.x, n.y, n.z);
+      m.rotation.y = Math.atan2(this.px - n.x, this.pz - n.z);
+      poseBeing(m, t * 1.6 + i, { speed: 0.35, flying: false, attacking: false, grounded: true });
+    }
+    if (this.heroMesh) {
+      const ph = useHud.getState().phase;
+      const show = ph === "title" || ph === "loading";
+      this.heroMesh.visible = show;
+      if (show) {
+        const s = this.world.spawn;
+        this.heroMesh.position.set(s.x, s.y, s.z);
+        this.heroMesh.rotation.y = t * 0.55;
+        poseBeing(this.heroMesh, t * 2.1, { speed: 2.4, flying: false, attacking: false, grounded: true });
+      }
+    }
   }
 
   private applyCamera(dt: number, paused: boolean) {
@@ -2098,16 +2207,10 @@ export class GameEngine {
     this.camera.fov += (this.wishFov - this.camera.fov) * (1 - Math.exp(-8 * dt));
     this.camera.updateProjectionMatrix();
 
-    const punch = this.punchT > 0 ? Math.sin((this.punchT / 0.22) * Math.PI) : 0;
-    const ch = this.charge;
-    this.fists.right.position.set(0.36, -0.34, -0.58 - punch * 0.34);
-    this.fists.left.position.set(-0.36, -0.34, -0.58 - punch * 0.14);
-    const glow = this.superSaiyan ? 0xe8b923 : ch > 0.05 ? 0xc8f4ff : 0xe2c8a8;
-    (this.fists.right.material as THREE.MeshLambertMaterial).color.setHex(glow);
-    (this.fists.left.material as THREE.MeshLambertMaterial).color.setHex(glow);
-    this.fists.right.scale.setScalar(1.25 + ch * 0.45);
-    this.fists.left.scale.setScalar(1.25 + ch * 0.28);
-    this.auraLight.intensity = this.superSaiyan ? 3.2 : ch * 2.6;
+    poseViewArms(this.fists, this.punchT, this.charge, this.bob, this.grounded, this.flying, this.superSaiyan);
+    this.fists.left.visible = true;
+    this.fists.right.visible = true;
+    this.auraLight.intensity = this.superSaiyan ? 3.2 : this.charge * 2.6;
     this.auraLight.color.setHex(this.superSaiyan ? 0xe8b923 : 0x7ce8ff);
 
     const hit = paused ? null : this.aimHit();
@@ -2256,7 +2359,9 @@ export class GameEngine {
         this.pitch = 0;
         this.vx = this.vy = this.vz = 0;
         this.flying = !!fly;
-        this.grounded = !fly;
+        const floor = supportY(this.world, x, z, y + 0.2, PLAYER_HW);
+        this.grounded = !fly && floor != null && y - floor <= 0.16;
+        if (y < 1.2) this.rescueFall();
       },
       setLook: (yaw: number, pitch: number) => {
         this.yaw = yaw;
@@ -2310,6 +2415,18 @@ export class GameEngine {
       });
     }
     this.enemies = [];
+    if (this.heroMesh) {
+      this.scene.remove(this.heroMesh);
+      this.heroMesh.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          const mat = o.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+      this.heroMesh = null;
+    }
     for (const t of this.ballTex) t.dispose();
     const ballGeos = new Set<THREE.BufferGeometry>();
     for (const m of this.ballMeshes) {

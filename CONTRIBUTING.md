@@ -31,6 +31,7 @@ A −X, D +X). Flug auf Touch muss ohne extra Knopf sinken können.
 |-------------|--------|
 | Balancing, Weltgröße, Blöcke | `src/game/constants.ts` |
 | Terrain, Kugeln, Spawns | `src/game/world.ts` |
+| Charaktere, Animation | `src/game/beings.ts` |
 | Loop, Kampf, Kamera, Wünsche | `src/game/engine.ts` |
 | Tasten / Touch / Pad | `src/game/input.ts` |
 | HUD, Titel, Overlays | `src/components/game-app.tsx` |

@@ -23,6 +23,8 @@ Kleine Schritte, die die bestehende Welt besser machen:
 ## Danach
 
 - [x] Zweites Biom (Terra, Cinder, Rime, Aether)
+- [x] Blocky-Humanoids + Walk/Fly/Punch
+- [x] Fall-Fix (Support-Snap, Void-Rescue, dichte Kronen)
 - [ ] Einfaches Inventar (9 Slots) statt fester Hotbar
 - [ ] Transformationen jenseits Super Saiyan (Kost + Look, kein Skilltree)
 - [ ] Tageszeit / Wetter als Wunsch- oder Welt-Flag
