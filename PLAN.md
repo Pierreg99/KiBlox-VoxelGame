@@ -18,7 +18,7 @@ Eine Session: Welt lädt → Spawn an der Hütte → Kugeln jagen / bauen / Gegn
 2. **Lesbare Physik.** FPS-Strafe (W vor, A/D seitlich), 1-Block-Step-up,
    Schwimmen nach oben, Flug mit Steigen/Sinken.
 3. **Ki statt Inventar-RPG.** Power-Zahl, Energieleiste, eine Transformation.
-4. **Kleine, dichte Welt.** 128×64×128 reicht für Jagd, Bau und Luftkampf.
+4. **Kleine, dichte Welt.** 128×80×128 reicht für Jagd, Bau und Luftkampf.
    Kein Streaming, kein Infinite-Gen in v1.
 5. **Offline.** `localStorage` only. Auth und DB bleiben aus.
 
@@ -47,16 +47,16 @@ flowchart LR
 
 Seeded Simplex:
 
-- Höhenfeld + Ridge + Warp
-- Stein / Erde / Namek-Gras, Sand an feuchten Küsten, Wasser bis Sea-Level 15
-- Höhlen (3D-Noise), Ki-Adern im Stein, Moos am Wasser
-- ~220 Namek-Bäume, 7 schwebende Ki-Inseln, Holzhütte als Spawn
-- 7 Drachenkugeln auf einem Ring um die Mitte (`scatterBalls`)
-- bis 16 Gegner (grunt / shooter / flyer), Spawn-Radius freihalten
+- Höhenfeld + Ridge + Warp, unabhängige Feuchte, Insel-Falloff
+- Stein / Erde / Namek-Gras, Sand und Lehm an Küsten, Wasser bis Sea-Level 16
+- Höhlen, Schluchten, Ki-Adern, Moos, Wasserfälle an Klippen
+- Schirmbäume, Lehm-Kuppeln, Zikkurat, Pfade, Ki-Haine, Wolkeninseln, Wachturm
+- 7 Drachenkugeln (eine auf dem Tempel), bis 22 Gegner
+- Atlas: eigene gekachelte Blocktexturen (`public/game/atlas.png`)
 
 ### Grafik
 
-- Atlas aus Canvas (kein Bild-Import für Blöcke)
+- Atlas aus eigenen gekachelten Texturen (`public/game/atlas.png`, Canvas-Fallback)
 - Chunk-Meshing mit Ambient Occlusion
 - UnrealBloom + OutputPass
 - Wolken, Wasser-Planes, Aura im Super-Saiyan

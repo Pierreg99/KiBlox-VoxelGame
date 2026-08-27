@@ -12,7 +12,7 @@ Names, tropes and mood (Ki, Super Saiyan, Shenron, Dragon Balls, Namek-like
 terrain, blocky first-person building) are used here as **homage and parody**
 inside an original, independently written game.
 
-- All **code, procedural textures, HUD art, audio synthesis and world
+- All **code, generated 2D block textures, HUD art, audio synthesis and world
   generation** in this repository are original work of Pierreg99 / Cryopg.it
   unless a file says otherwise.
 - No official sprites, models, music, fonts or story text are included.

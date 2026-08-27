@@ -1,30 +1,26 @@
 # Changelog
 
-Format nah an [Keep a Changelog](https://keepachangelog.com/). Versionen
-sind Repo-Stände, kein semver-Versprechen an Mods.
+## 0.4.0 — 2026-08-27
+
+- Original block atlas: cube-face grass sides (not mini-landscapes), crystal grain, path, even water/stone
+- Map: umbrella trees, clay pod village, ziggurat temple, paths, waterfalls, crystal groves, lookout
+- Movement: snappier walk, look-fly with coast, ground snap, 3-stage step-up, grounded respawn
+- Save slot `kiblox-save-v4`
+
+## 0.3.0 — 2026-08-27
+
+- Own generated block atlas, sky, title art, dragon-orb and ki-blast sprites
+- Richer map: biomes, rivers, ravines, temple ruin, village, cloud islands, taller world
+- Movement: coyote / jump buffer, accel+friction, look-based ki-flight, swim-look, step-up, FOV
+- New blocks: Tempelstein, Lehm, Wolkenflaum
+- Save slot `kiblox-save-v3` (old worlds do not migrate)
 
 ## 0.2.0 — 2026-08-23
 
-Spielbar-Härtung nach dem ersten öffentlichen Snapshot.
-
-### Behoben
-
-- Primary-Button startet **Fortsetzen**, statt die Welt neu zu würfeln
-- Pointer Lock am Klick, nicht nach dem asynchronen Chunk-Build
-- Touch-Flug sinkt, wenn Sprung nicht gehalten wird; Landen möglich
-- Hotbar auf Touch tappbar und über dem Look-Pad
-- Linksziehen dreht die Kamera, baut aber nicht ab
-- Laptops mit Touch-Punkte-Zähler gelten nicht automatisch als Touch
-- Storm-Wunsch setzt Kugeln wirklich neu (`scatterBalls`)
-- Ghost-Gamepad feuert keinen Dash mehr beim Titel
-- Speicher: gemeinsame Geometrien und Entity-Meshes sauber disposen
-- 1-Block-Step-up, Schwimmen nach oben, Spawn-I-Frames
-
-### Doku
-
-- README, PLAN, PROGRESS, ROADMAP, CONTRIBUTING
-- MIT-Lizenz, NOTICE (Fan-Work), THIRD_PARTY
+- Continue vs new-world, pointer lock, touch fly/hotbar
+- Drag-look vs mine, storm wish scatter, ghost gamepad, dispose leaks
+- Docs, MIT license, NOTICE, roadmap
 
 ## 0.1.0 — 2026-08-23
 
-Erste öffentliche Quelle: Voxel-Welt, Ki-Kampf, Grafik-Pass (Chunks, AO, Bloom).
+- Initial public snapshot

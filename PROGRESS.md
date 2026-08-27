@@ -1,9 +1,8 @@
 # PROGRESS — KI BLOX
 
-Letzte Aktualisierung: 2026-08-23.
+Letzte Aktualisierung: 2026-08-27.
 
-Das Spiel ist **spielbar**. v0.2 ist der Stand nach der Steuerungs-, Speicher-
-und UX-Runde auf der ersten öffentlichen Snapshot-Welt.
+Das Spiel ist **spielbar**. v0.4: eigene Atlas-Texturen, dichtere Karte, straffere Bewegung.
 
 ## Status
 
@@ -11,11 +10,11 @@ und UX-Runde auf der ersten öffentlichen Snapshot-Welt.
 |---------|-------|
 | Titel / Laden / Pause / Tod / Wunsch | Fertig |
 | Voxel-Welt + Chunk-Meshing + Bloom | Fertig |
-| FPS-Bewegung, Flug, Schwimmen, 1-Block-Step | Fertig |
+| FPS-Bewegung, Ki-Flug Blick, Snap, Step-up | Fertig |
+| localStorage Save v4 | Fertig |
 | Bauen / Abbauen, Hotbar Desktop + Touch | Fertig |
 | Ki-Kampf, Dash, Super Saiyan | Fertig |
 | Drachenkugeln + Shenron-Wünsche | Fertig |
-| localStorage Save v2 | Fertig |
 | Touch-Sticks + Gamepad | Fertig |
 | Auth / DB / Multiplayer | Aus, absichtlich |
 | Tests (Playwright-Smoke intern) | Manuell + Smoke, keine CI-Matrix |
@@ -24,7 +23,7 @@ und UX-Runde auf der ersten öffentlichen Snapshot-Welt.
 
 ### Welt & Grafik
 
-- 128×64×128 Namek-Terrain, Höhlen, Wasser, Bäume, Ki-Inseln, Spawn-Hütte
+- 128×80×128 Terrain, Schirmbäume, Lehm-Kuppeln, Zikkurat, Pfade, Wasserfälle, Ki-Haine
 - 16³-Chunks, Ambient Occlusion, Atlas-Texturen, Bloom
 - Drachenkugeln mit Sternen, Shenron-Modell (prozedural)
 - Gegner: grunt, shooter, flyer

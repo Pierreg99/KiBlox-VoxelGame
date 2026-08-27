@@ -1,7 +1,23 @@
 import * as THREE from "three";
-import { AIR, BEDROCK, DIRT, GRASS, KI, LEAVES, MOSS, SAND, STONE, WATER, WOOD } from "./constants";
+import {
+  AIR,
+  BEDROCK,
+  CLAY,
+  CLOUD,
+  DIRT,
+  GRASS,
+  KI,
+  LEAVES,
+  MOSS,
+  PATH,
+  SAND,
+  STONE,
+  TEMPLE,
+  WATER,
+  WOOD,
+} from "./constants";
 
-const TILE = 32;
+const TILE = 64;
 const COLS = 4;
 const ATLAS = TILE * COLS;
 
@@ -67,7 +83,7 @@ function clamp255(n: number) {
   return n < 0 ? 0 : n > 255 ? 255 : n | 0;
 }
 
-/** Atlas tile indices */
+/** Atlas tile indices — match public/game/atlas.png */
 export const TILE_GRASS_TOP = 0;
 export const TILE_GRASS_SIDE = 1;
 export const TILE_DIRT = 2;
@@ -79,6 +95,11 @@ export const TILE_KI = 7;
 export const TILE_BEDROCK = 8;
 export const TILE_WATER = 9;
 export const TILE_MOSS = 10;
+export const TILE_TEMPLE = 11;
+export const TILE_CLAY = 12;
+export const TILE_CLOUD = 13;
+export const TILE_WOOD_TOP = 14;
+export const TILE_PATH = 15;
 
 export function faceTile(block: number, ny: number): number {
   if (block === GRASS) {
@@ -89,14 +110,27 @@ export function faceTile(block: number, ny: number): number {
   if (block === DIRT) return TILE_DIRT;
   if (block === STONE) return TILE_STONE;
   if (block === SAND) return TILE_SAND;
-  if (block === WOOD) return TILE_WOOD;
+  if (block === WOOD) return ny === 0 ? TILE_WOOD : TILE_WOOD_TOP;
   if (block === LEAVES) return TILE_LEAVES;
   if (block === KI) return TILE_KI;
   if (block === BEDROCK) return TILE_BEDROCK;
   if (block === WATER) return TILE_WATER;
   if (block === MOSS) return TILE_MOSS;
+  if (block === TEMPLE) return TILE_TEMPLE;
+  if (block === CLAY) return TILE_CLAY;
+  if (block === CLOUD) return TILE_CLOUD;
+  if (block === PATH) return TILE_PATH;
   if (block === AIR) return TILE_STONE;
   return TILE_STONE;
+}
+
+function styleAtlas(tex: THREE.Texture) {
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
 }
 
 export function createAtlasTexture(): THREE.CanvasTexture {
@@ -112,63 +146,48 @@ export function createAtlasTexture(): THREE.CanvasTexture {
     const n2 = noise2(x * 0.9, y * 0.9);
     const blade = hash(x * 91 + y * 17) > 0.82 ? 22 : 0;
     const tuft = n2 > 0.72 ? 18 : 0;
-    return [
-      clamp255(36 + n * 28 + blade),
-      clamp255(128 + n * 48 + tuft),
-      clamp255(38 + n * 22),
-    ];
+    return [clamp255(36 + n * 28 + blade), clamp255(128 + n * 48 + tuft), clamp255(38 + n * 22)];
   });
-
   fillTile(d, TILE_GRASS_SIDE, (x, y) => {
-    if (y < 6) {
+    if (y < 12) {
       const n = noise2(x * 0.4, y * 0.4);
       return [clamp255(52 + n * 24), clamp255(122 + n * 28), clamp255(44 + n * 16)];
     }
     const n = noise2(x * 0.25, y * 0.25);
     return [clamp255(118 + n * 28), clamp255(78 + n * 18), clamp255(42 + n * 12)];
   });
-
   fillTile(d, TILE_DIRT, (x, y) => {
     const n = noise2(x * 0.3, y * 0.3);
     const p = hash(x * 13 + y * 71) > 0.92 ? -20 : 0;
     return [clamp255(124 + n * 22 + p), clamp255(82 + n * 14 + p), clamp255(46 + n * 10)];
   });
-
   fillTile(d, TILE_STONE, (x, y) => {
     const n = noise2(x * 0.22, y * 0.22);
     const crack = hash(x * 3 + y * 11) > 0.94 ? -30 : 0;
     const g = 96 + n * 28 + crack;
     return [clamp255(g - 4), clamp255(g + 4), clamp255(g - 2)];
   });
-
   fillTile(d, TILE_SAND, (x, y) => {
     const n = noise2(x * 0.4, y * 0.4);
     return [clamp255(198 + n * 20), clamp255(178 + n * 16), clamp255(110 + n * 12)];
   });
-
   fillTile(d, TILE_WOOD, (x, y) => {
     const ring = Math.sin(x * 0.9) * 10;
     const n = noise2(x * 0.15, y * 0.5);
-    return [
-      clamp255(92 + ring + n * 16),
-      clamp255(58 + ring * 0.5 + n * 10),
-      clamp255(32 + n * 8),
-    ];
+    return [clamp255(92 + ring + n * 16), clamp255(58 + ring * 0.5 + n * 10), clamp255(32 + n * 8)];
   });
-
   fillTile(d, TILE_LEAVES, (x, y) => {
     const n = noise2(x * 0.5, y * 0.5);
     const hole = hash(x * 29 + y * 47) > 0.78;
     if (hole) return [28, 64, 36];
     return [clamp255(36 + n * 20), clamp255(96 + n * 36), clamp255(48 + n * 16)];
   });
-
   fillTile(d, TILE_KI, (x, y) => {
-    const cx = x - 16;
-    const cy = y - 16;
+    const cx = x - 32;
+    const cy = y - 32;
     const r = Math.hypot(cx, cy);
     const n = noise2(x * 0.45, y * 0.45);
-    const core = Math.max(0, 1 - r / 16);
+    const core = Math.max(0, 1 - r / 32);
     const facet = Math.abs(Math.sin(x * 0.6) * Math.cos(y * 0.6));
     return [
       clamp255(30 + core * 200 + facet * 40 + n * 20),
@@ -176,23 +195,16 @@ export function createAtlasTexture(): THREE.CanvasTexture {
       clamp255(210 + core * 45),
     ];
   });
-
   fillTile(d, TILE_BEDROCK, (x, y) => {
     const n = noise2(x * 0.55, y * 0.55);
     const g = 28 + n * 22;
     return [clamp255(g), clamp255(g + 4), clamp255(g + 2)];
   });
-
   fillTile(d, TILE_WATER, (x, y) => {
     const n = noise2(x * 0.2, y * 0.35);
     const band = Math.sin((x + y) * 0.45) * 12;
-    return [
-      clamp255(28 + n * 18),
-      clamp255(118 + n * 30 + band),
-      clamp255(148 + n * 28 + band),
-    ];
+    return [clamp255(28 + n * 18), clamp255(118 + n * 30 + band), clamp255(148 + n * 28 + band)];
   });
-
   fillTile(d, TILE_MOSS, (x, y) => {
     const n = noise2(x * 0.3, y * 0.3);
     const moss = hash(x * 19 + y * 41) > 0.55;
@@ -200,14 +212,61 @@ export function createAtlasTexture(): THREE.CanvasTexture {
     const g = 88 + n * 22;
     return [clamp255(g - 6), clamp255(g + 8), clamp255(g - 4)];
   });
+  fillTile(d, TILE_TEMPLE, (x, y) => {
+    const n = noise2(x * 0.2, y * 0.2);
+    return [clamp255(186 + n * 16), clamp255(176 + n * 14), clamp255(148 + n * 12)];
+  });
+  fillTile(d, TILE_CLAY, (x, y) => {
+    const n = noise2(x * 0.35, y * 0.35);
+    return [clamp255(168 + n * 22), clamp255(92 + n * 16), clamp255(54 + n * 10)];
+  });
+  fillTile(d, TILE_CLOUD, (x, y) => {
+    const n = noise2(x * 0.18, y * 0.18);
+    return [clamp255(220 + n * 20), clamp255(236 + n * 12), clamp255(232 + n * 14)];
+  });
+  fillTile(d, TILE_WOOD_TOP, (x, y) => {
+    const n = noise2(x * 0.22, y * 0.22);
+    const ring = Math.sin((x + y) * 0.35 + n) * 10;
+    return [clamp255(128 + ring + n * 8), clamp255(86 + ring * 0.6), clamp255(48 + n * 6)];
+  });
+  fillTile(d, TILE_PATH, (x, y) => {
+    const n = noise2(x * 0.32, y * 0.32);
+    const p = hash(x * 21 + y * 53) > 0.9 ? 18 : 0;
+    return [clamp255(168 + n * 18 + p), clamp255(132 + n * 14 + p), clamp255(78 + n * 10)];
+  });
 
   ctx.putImageData(img, 0, 0);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.needsUpdate = true;
-  return tex;
+  return styleAtlas(new THREE.CanvasTexture(canvas)) as THREE.CanvasTexture;
+}
+
+export function loadAtlasTexture(): Promise<THREE.Texture> {
+  return new Promise((resolve) => {
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin("anonymous");
+    loader.load(
+      "/game/atlas.png",
+      (tex) => resolve(styleAtlas(tex)),
+      undefined,
+      () => resolve(createAtlasTexture()),
+    );
+  });
+}
+
+export function loadGameTexture(url: string): Promise<THREE.Texture | null> {
+  return new Promise((resolve) => {
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin("anonymous");
+    loader.load(
+      url,
+      (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.needsUpdate = true;
+        resolve(tex);
+      },
+      undefined,
+      () => resolve(null),
+    );
+  });
 }
 
 export const ATLAS_COLS = COLS;
@@ -219,26 +278,33 @@ export function tileUv(tile: number, u: number, v: number, inset = 0.02): [numbe
   const row = Math.floor(tile / COLS);
   const su = 1 / COLS;
   const sv = 1 / COLS;
-  return [col * su + inset * su + u * su * (1 - 2 * inset), 1 - (row * sv + inset * sv + (1 - v) * sv * (1 - 2 * inset))];
+  return [
+    col * su + inset * su + u * su * (1 - 2 * inset),
+    1 - (row * sv + inset * sv + (1 - v) * sv * (1 - 2 * inset)),
+  ];
 }
 
-export function createBallTexture(stars: number): THREE.CanvasTexture {
+export function createBallTexture(stars: number, base?: HTMLImageElement | null): THREE.CanvasTexture {
   const s = 128;
   const c = document.createElement("canvas");
   c.width = s;
   c.height = s;
   const ctx = c.getContext("2d")!;
-  const g = ctx.createRadialGradient(s * 0.38, s * 0.34, 8, s * 0.5, s * 0.5, s * 0.5);
-  g.addColorStop(0, "#ffe27a");
-  g.addColorStop(0.55, "#e8b923");
-  g.addColorStop(1, "#8a5a08");
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(s / 2, s / 2, s / 2 - 2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(80,40,0,0.45)";
-  ctx.lineWidth = 3;
-  ctx.stroke();
+  if (base) {
+    ctx.drawImage(base, 0, 0, s, s);
+  } else {
+    const g = ctx.createRadialGradient(s * 0.38, s * 0.34, 8, s * 0.5, s * 0.5, s * 0.5);
+    g.addColorStop(0, "#ffe27a");
+    g.addColorStop(0.55, "#e8b923");
+    g.addColorStop(1, "#8a5a08");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(s / 2, s / 2, s / 2 - 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(80,40,0,0.45)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
 
   const layout: [number, number][][] = [
     [[0, 0]],

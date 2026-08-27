@@ -15,10 +15,15 @@ import {
   CZ,
   DIRT,
   EYE,
+  AIR_ACCEL,
+  COYOTE_TIME,
+  FLY_ACCEL,
+  FLY_DRAG,
   FLY_SPEED,
   GRASS,
   GRAVITY,
   HOTBAR,
+  JUMP_BUFFER,
   JUMP_VEL,
   KI,
   LEAVES,
@@ -29,13 +34,16 @@ import {
   REACH,
   SAND,
   SAVE_VERSION,
+  SNAP_DOWN,
   SPRINT_SPEED,
   SSJ_MUL,
   SSJ_POWER,
   START_POWER,
+  STEP_HEIGHT,
   SX,
   SY,
   SZ,
+  WALK_ACCEL,
   WALK_SPEED,
   WATER,
   WOOD,
@@ -46,7 +54,7 @@ import { meshChunk } from "./mesher";
 import { clearSave, hasSave, loadSave, writeSave, type SaveData } from "./save";
 import type { Phase } from "./store";
 import { useHud } from "./store";
-import { createAtlasTexture, createBallTexture } from "./textures";
+import { createAtlasTexture, createBallTexture, loadAtlasTexture, loadGameTexture } from "./textures";
 import { aabbHitsWorld, chunkCoords, chunkKey, raycastVoxels, World, type EnemyKind } from "./world";
 
 type Enemy = {
@@ -113,7 +121,9 @@ export class GameEngine {
   world: World;
   private chunkMeshes = new Map<number, THREE.Mesh>();
   private terrainMat: THREE.MeshLambertMaterial;
-  private atlas: THREE.CanvasTexture;
+  private atlas: THREE.Texture;
+  private kiOrbTex: THREE.Texture | null = null;
+  private ballBase: HTMLImageElement | null = null;
   private highlight: THREE.LineSegments;
   private fists: { left: THREE.Mesh; right: THREE.Mesh };
   private auraLight: THREE.PointLight;
@@ -149,6 +159,9 @@ export class GameEngine {
   flying = false;
   grounded = false;
   superSaiyan = false;
+  private coyote = 0;
+  private jumpBuf = 0;
+  private wishFov = 78;
   health = MAX_HEALTH;
   power = START_POWER;
   selected = 0;
@@ -294,6 +307,20 @@ export class GameEngine {
   }
 
   async start() {
+    const [atlas, skyTex, kiTex, ballImg] = await Promise.all([
+      loadAtlasTexture(),
+      loadGameTexture("/game/sky.jpg"),
+      loadGameTexture("/game/ki-orb.png"),
+      loadHtmlImage("/game/ball.png"),
+    ]);
+    this.atlas.dispose();
+    this.atlas = atlas;
+    this.terrainMat.map = atlas;
+    this.terrainMat.needsUpdate = true;
+    if (skyTex) this.applySkyTex(skyTex);
+    this.kiOrbTex = kiTex;
+    this.ballBase = ballImg;
+
     const existing = loadSave();
     if (existing) {
       this.world = new World(existing.seed);
@@ -327,6 +354,7 @@ export class GameEngine {
       this.pz = this.world.spawn.z;
       this.pitch = -0.22;
     }
+    this.unstuck();
     useHud.getState().patch({ loadProgress: 0.18 });
     await this.buildAllChunks();
     this.spawnEntities();
@@ -422,6 +450,18 @@ export class GameEngine {
     return mesh;
   }
 
+  private applySkyTex(tex: THREE.Texture) {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    const old = this.sky.material;
+    this.sky.material = new THREE.MeshBasicMaterial({
+      map: tex,
+      side: THREE.BackSide,
+      depthWrite: false,
+    });
+    if (old && !Array.isArray(old)) old.dispose();
+  }
+
   private spawnClouds() {
     const mat = new THREE.MeshLambertMaterial({
       color: 0xe8f6f2,
@@ -493,7 +533,7 @@ export class GameEngine {
     this.ballTex = [];
     const geo = new THREE.SphereGeometry(0.28, 16, 12);
     for (const b of this.world.balls) {
-      const tex = createBallTexture(b.stars);
+      const tex = createBallTexture(b.stars, this.ballBase);
       this.ballTex.push(tex);
       const mat = new THREE.MeshStandardMaterial({
         map: tex,
@@ -543,6 +583,18 @@ export class GameEngine {
         }),
       );
       mesh.visible = false;
+      if (this.kiOrbTex) {
+        const spr = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: this.kiOrbTex,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          }),
+        );
+        spr.scale.setScalar(1.8);
+        mesh.add(spr);
+      }
       this.scene.add(mesh);
       this.blasts.push({
         mesh,
@@ -709,6 +761,15 @@ export class GameEngine {
     this.trauma = 0;
     this.hitstop = 0;
     this.acc = 0;
+    this.unstuck();
+  }
+
+  private unstuck() {
+    let n = 0;
+    while (aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H) && n < 28) {
+      this.py += 0.4;
+      n++;
+    }
   }
 
   private requestLock() {
@@ -788,8 +849,9 @@ export class GameEngine {
     this.py = this.world.spawn.y;
     this.pz = this.world.spawn.z;
     this.vx = this.vy = this.vz = 0;
-    this.flying = true;
+    this.flying = false;
     this.invuln = 1.5;
+    this.unstuck();
     this.input.enabled = true;
     this.setPhase("playing");
     this.toast("Zurück im Nest");
@@ -937,40 +999,78 @@ export class GameEngine {
 
     const { fx, fz, rx, rz } = this.forwardRight();
     const ssj = this.superSaiyan ? SSJ_MUL : 1;
+    const touch = useHud.getState().isTouch;
 
-    if (edges && act.jumpPressed && this.grounded && !this.flying) {
-      this.vy = JUMP_VEL * (this.superSaiyan ? 1.2 : 1);
+    if (this.grounded) this.coyote = COYOTE_TIME;
+    else this.coyote = Math.max(0, this.coyote - dt);
+    if (act.jumpPressed) this.jumpBuf = JUMP_BUFFER;
+    else this.jumpBuf = Math.max(0, this.jumpBuf - dt);
+
+    if (this.jumpBuf > 0 && this.coyote > 0 && !this.flying) {
+      this.vy = JUMP_VEL * (this.superSaiyan ? 1.22 : 1);
       this.grounded = false;
+      this.coyote = 0;
+      this.jumpBuf = 0;
       this.audio.jump();
-    } else if (edges && act.jumpPressed && !this.grounded && !this.flying) {
+    } else if (act.jumpPressed && !this.grounded && !this.flying) {
       this.flying = true;
-      this.toast("Flugmodus");
+      this.toast("Ki-Flug · Blickrichtung");
+    }
+
+    if (this.flying && this.grounded && this.vy <= 0 && !act.jump) {
+      this.flying = false;
     }
 
     if (this.flying) {
-      const spd = FLY_SPEED * ssj;
-      this.vx = (act.moveX * rx + act.moveY * fx) * spd;
-      this.vz = (act.moveX * rz + act.moveY * fz) * spd;
-      let up = 0;
-      if (act.jump) up += 1;
-      if (act.sprint || act.flyDown) up -= 1;
-      if (up === 0 && useHud.getState().isTouch) up = -0.34;
-      this.vy = up * spd * 0.85;
+      const look = this.lookDir();
+      let wx = act.moveX * rx + act.moveY * look.x;
+      let wy = act.moveY * look.y;
+      let wz = act.moveX * rz + act.moveY * look.z;
+      if (act.jump) wy += 1;
+      if (act.sprint || act.flyDown) wy -= 1;
+      if (wx === 0 && wy === 0 && wz === 0 && touch) wy = -0.38;
+      const mag = Math.hypot(wx, wy, wz);
+      const hasWish = mag > 1e-4;
+      if (hasWish) {
+        wx /= mag;
+        wy /= mag;
+        wz /= mag;
+        const spd = FLY_SPEED * ssj;
+        const k = 1 - Math.exp(-FLY_ACCEL * dt);
+        this.vx += (wx * spd - this.vx) * k;
+        this.vy += (wy * spd * 0.92 - this.vy) * k;
+        this.vz += (wz * spd - this.vz) * k;
+      } else {
+        const drag = 1 - Math.exp(-FLY_DRAG * dt);
+        this.vx += (0 - this.vx) * drag * 0.42;
+        this.vy += (0 - this.vy) * drag * 0.55;
+        this.vz += (0 - this.vz) * drag * 0.42;
+      }
     } else {
       const spd = (act.sprint ? SPRINT_SPEED : WALK_SPEED) * ssj;
       const wishX = act.moveX * rx + act.moveY * fx;
       const wishZ = act.moveX * rz + act.moveY * fz;
-      const accel = this.grounded ? 28 : 8;
-      this.vx += (wishX * spd - this.vx) * Math.min(1, accel * dt);
-      this.vz += (wishZ * spd - this.vz) * Math.min(1, accel * dt);
+      const accel = this.grounded ? WALK_ACCEL : AIR_ACCEL;
+      const k = 1 - Math.exp(-accel * dt);
+      this.vx += (wishX * spd - this.vx) * k;
+      this.vz += (wishZ * spd - this.vz) * k;
+      if (!this.flying && !act.jump && this.vy > 4) this.vy *= Math.exp(-9 * dt);
       this.vy -= GRAVITY * dt;
       if (this.grounded && act.moveX === 0 && act.moveY === 0) {
-        this.vx *= 0.72;
-        this.vz *= 0.72;
+        const fr = Math.exp(-14 * dt);
+        this.vx *= fr;
+        this.vz *= fr;
       }
     }
 
+    const falling = this.vy;
     this.moveCollide(dt, act.jump);
+    if (this.grounded && falling < -11) {
+      this.trauma = Math.min(1, this.trauma + 0.16);
+      this.burst(this.px, this.py + 0.1, this.pz, 5);
+    }
+
+    this.wishFov = this.flying ? 94 : act.sprint && this.grounded ? 86 : 78;
 
     if (this.py < -8) {
       this.hurt(25, "Absturz");
@@ -1052,47 +1152,66 @@ export class GameEngine {
 
   private moveCollide(dt: number, swimUp: boolean) {
     const speed = Math.hypot(this.vx, this.vy, this.vz);
-    const steps = Math.max(1, Math.ceil((speed * dt) / 0.18));
+    const steps = Math.max(1, Math.ceil((speed * dt) / 0.14));
     const sdt = dt / steps;
     let grounded = false;
+    const wasGrounded = this.grounded;
+    const canStep = !this.flying && this.vy <= 0.55 && (this.grounded || this.coyote > 0);
+    const tryStep = (nx: number, nz: number) => {
+      for (const step of [0.42, 0.7, STEP_HEIGHT]) {
+        if (!aabbHitsWorld(this.world, nx, this.py + step, nz, PLAYER_HW, PLAYER_H)) {
+          this.py += step;
+          return true;
+        }
+      }
+      return false;
+    };
     for (let i = 0; i < steps; i++) {
+      const ox = this.px;
       this.px += this.vx * sdt;
       if (aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H)) {
-        const step = 1.05;
-        if (
-          !this.flying &&
-          this.vy <= 0.45 &&
-          !aabbHitsWorld(this.world, this.px, this.py + step, this.pz, PLAYER_HW, PLAYER_H)
-        ) {
-          this.py += step;
+        if (canStep && tryStep(this.px, this.pz)) {
+          /* stepped up, keep vx */
         } else {
-          this.px -= this.vx * sdt;
+          this.px = ox;
           this.vx = 0;
         }
       }
+      const oz = this.pz;
       this.pz += this.vz * sdt;
       if (aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H)) {
-        const step = 1.05;
-        if (
-          !this.flying &&
-          this.vy <= 0.45 &&
-          !aabbHitsWorld(this.world, this.px, this.py + step, this.pz, PLAYER_HW, PLAYER_H)
-        ) {
-          this.py += step;
+        if (canStep && tryStep(this.px, this.pz)) {
+          /* stepped up, keep vz */
         } else {
-          this.pz -= this.vz * sdt;
+          this.pz = oz;
           this.vz = 0;
         }
       }
+      const oy = this.py;
       this.py += this.vy * sdt;
       if (aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H)) {
-        this.py -= this.vy * sdt;
+        this.py = oy;
         if (this.vy <= 0) grounded = true;
         this.vy = 0;
       }
     }
+
+    if (wasGrounded && !grounded && !this.flying && this.vy <= 0.45) {
+      for (const drop of [0.2, 0.38, SNAP_DOWN]) {
+        if (aabbHitsWorld(this.world, this.px, this.py - drop, this.pz, PLAYER_HW, PLAYER_H)) {
+          this.py -= drop;
+          for (let n = 0; n < 14 && aabbHitsWorld(this.world, this.px, this.py, this.pz, PLAYER_HW, PLAYER_H); n++) {
+            this.py += 0.05;
+          }
+          grounded = true;
+          this.vy = 0;
+          break;
+        }
+      }
+    }
+
     this.grounded = grounded;
-    if (grounded) this.flying = false;
+    if (grounded && this.vy <= 0) this.flying = false;
     this.px = Math.max(1.2, Math.min(SX - 1.2, this.px));
     this.pz = Math.max(1.2, Math.min(SZ - 1.2, this.pz));
     this.py = Math.max(1, Math.min(SY - 3, this.py));
@@ -1103,10 +1222,17 @@ export class GameEngine {
       this.world.get(wx, Math.floor(this.py + 0.2), wz) === WATER ||
       this.world.get(wx, Math.floor(this.py + 1.05), wz) === WATER;
     if (wet && !this.flying) {
-      this.vx *= 0.84;
-      this.vz *= 0.84;
-      if (this.vy < -1.5) this.vy *= 0.62;
-      if (swimUp) this.vy = Math.max(this.vy, 5.6);
+      this.vx *= 0.86;
+      this.vz *= 0.86;
+      if (this.vy < -1.2) this.vy *= 0.58;
+      this.vy += 9 * sdt * steps;
+      if (this.vy > 2.4) this.vy = 2.4;
+      if (swimUp) {
+        const d = this.lookDir();
+        this.vx += d.x * 16 * dt;
+        this.vy = Math.max(this.vy, 5.6 + Math.max(0, d.y) * 4);
+        this.vz += d.z * 16 * dt;
+      }
     }
   }
 
@@ -1145,7 +1271,7 @@ export class GameEngine {
     const d = this.lookDir();
     const spd = 26 * (this.superSaiyan ? 1.35 : 1);
     this.vx = d.x * spd;
-    this.vy = d.y * spd * 0.55;
+    this.vy = d.y * spd * (this.flying ? 0.88 : 0.55);
     this.vz = d.z * spd;
     this.audio.dash();
     this.trauma = Math.min(1, this.trauma + 0.16);
@@ -1432,9 +1558,13 @@ export class GameEngine {
         const ideal = 11;
         if (dist < 46 && dist > 0.4) {
           const push = dist < ideal ? -1 : 1;
-          const spd = 3.1;
-          e.vx += ((dx / dist) * push * spd - e.vx) * 4 * dt;
-          e.vz += ((dz / dist) * push * spd - e.vz) * 4 * dt;
+          const spd = 3.4;
+          const px = -dz / dist;
+          const pz = dx / dist;
+          const wx = (dx / dist) * push * spd + px * Math.sin(this.orbitT * 1.6) * 2.4;
+          const wz = (dz / dist) * push * spd + pz * Math.sin(this.orbitT * 1.6) * 2.4;
+          e.vx += (wx - e.vx) * (1 - Math.exp(-5 * dt));
+          e.vz += (wz - e.vz) * (1 - Math.exp(-5 * dt));
           if (e.hop <= 0 && this.onGround(e.x, e.y, e.z)) {
             e.vy = 4.4;
             e.hop = 0.9 + Math.random() * 0.5;
@@ -1451,9 +1581,9 @@ export class GameEngine {
         }
       } else {
         if (dist < 48 && dist > 1.3) {
-          const spd = 3.4;
-          e.vx += ((dx / dist) * spd - e.vx) * 4 * dt;
-          e.vz += ((dz / dist) * spd - e.vz) * 4 * dt;
+          const spd = 3.8;
+          e.vx += ((dx / dist) * spd - e.vx) * (1 - Math.exp(-6 * dt));
+          e.vz += ((dz / dist) * spd - e.vz) * (1 - Math.exp(-6 * dt));
           if (e.hop <= 0 && this.onGround(e.x, e.y, e.z)) {
             e.vy = 5.2;
             e.hop = 0.7 + Math.random() * 0.6;
@@ -1490,13 +1620,27 @@ export class GameEngine {
     const h = flying ? 1.1 : 1.45;
     e.x += e.vx * dt;
     if (aabbHitsWorld(this.world, e.x, e.y, e.z, hw, h)) {
-      e.x -= e.vx * dt;
-      e.vx = 0;
+      if (
+        !flying &&
+        !aabbHitsWorld(this.world, e.x, e.y + 1.05, e.z, hw, h)
+      ) {
+        e.y += 1.05;
+      } else {
+        e.x -= e.vx * dt;
+        e.vx = 0;
+      }
     }
     e.z += e.vz * dt;
     if (aabbHitsWorld(this.world, e.x, e.y, e.z, hw, h)) {
-      e.z -= e.vz * dt;
-      e.vz = 0;
+      if (
+        !flying &&
+        !aabbHitsWorld(this.world, e.x, e.y + 1.05, e.z, hw, h)
+      ) {
+        e.y += 1.05;
+      } else {
+        e.z -= e.vz * dt;
+        e.vz = 0;
+      }
     }
     e.y += e.vy * dt;
     if (aabbHitsWorld(this.world, e.x, e.y, e.z, hw, h)) {
@@ -1701,11 +1845,14 @@ export class GameEngine {
     const shake = this.trauma * this.trauma;
     const ox = (Math.random() - 0.5) * shake * 0.28;
     const oy = (Math.random() - 0.5) * shake * 0.28;
-    const bobY = this.grounded && !this.flying ? Math.sin(this.bob) * 0.045 : 0;
-    this.camera.position.set(this.px + ox, this.py + EYE + oy + bobY, this.pz);
+    const bobY = this.grounded && !this.flying ? Math.sin(this.bob) * 0.055 : 0;
+    const bobX = this.grounded && !this.flying ? Math.cos(this.bob * 0.5) * 0.018 : 0;
+    this.camera.position.set(this.px + ox + bobX, this.py + EYE + oy + bobY, this.pz);
     this.camera.rotation.order = "YXZ";
     this.camera.rotation.y = this.yaw;
     this.camera.rotation.x = this.pitch;
+    this.camera.fov += (this.wishFov - this.camera.fov) * (1 - Math.exp(-8 * dt));
+    this.camera.updateProjectionMatrix();
 
     const punch = this.punchT > 0 ? Math.sin((this.punchT / 0.22) * Math.PI) : 0;
     const ch = this.charge;
@@ -1833,15 +1980,46 @@ export class GameEngine {
       getYaw: () => this.yaw,
       getSpeed: () => Math.hypot(this.vx, this.vz),
       getPos: () => ({ x: this.px, y: this.py, z: this.pz }),
+      getPhase: () => useHud.getState().phase,
+      getBalls: () =>
+        this.world.balls.map((b) => ({
+          x: b.x,
+          y: b.y,
+          z: b.z,
+          stars: b.stars,
+          taken: b.taken,
+        })),
       setKeys: (codes: string[]) => this.input.injectKeys(codes),
-      setPose: (x: number, y: number, z: number, yaw: number) => {
+      setPose: (x: number, y: number, z: number, yaw: number, fly = false) => {
         this.px = x;
         this.py = y;
         this.pz = z;
         this.yaw = yaw;
         this.pitch = 0;
         this.vx = this.vy = this.vz = 0;
-        this.flying = true;
+        this.flying = !!fly;
+        this.grounded = !fly;
+      },
+      setLook: (yaw: number, pitch: number) => {
+        this.yaw = yaw;
+        this.pitch = Math.max(-1.4, Math.min(1.4, pitch));
+      },
+      mineNow: () => {
+        const hit = this.aimHit();
+        if (!hit || hit.block === AIR || hit.block === WATER || hit.block === BEDROCK) return null;
+        this.breakBlock(hit.x, hit.y, hit.z, hit.block);
+        return { x: hit.x, y: hit.y, z: hit.z, block: hit.block };
+      },
+      placeNow: () => {
+        this.placeCd = 0;
+        this.placeBlock();
+        return this.edits[this.edits.length - 1] ?? null;
+      },
+      takeAllBalls: () => {
+        for (const b of this.world.balls) b.taken = true;
+        for (const m of this.ballMeshes) m.visible = false;
+        this.openWish();
+        return useHud.getState().phase;
       },
     };
   }
@@ -1906,14 +2084,30 @@ function yieldFrame() {
   return new Promise<void>((r) => requestAnimationFrame(() => r()));
 }
 
+function loadHtmlImage(url: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
 declare global {
   interface Window {
     __controlsTest?: {
       getYaw: () => number;
       getSpeed: () => number;
       getPos: () => { x: number; y: number; z: number };
+      getPhase?: () => string;
+      getBalls?: () => { x: number; y: number; z: number; stars: number; taken: boolean }[];
       setKeys: (codes: string[]) => void;
-      setPose?: (x: number, y: number, z: number, yaw: number) => void;
+      setPose?: (x: number, y: number, z: number, yaw: number, fly?: boolean) => void;
+      setLook?: (yaw: number, pitch: number) => void;
+      mineNow?: () => { x: number; y: number; z: number; block: number } | null;
+      placeNow?: () => [number, number, number, number] | null;
+      takeAllBalls?: () => string;
     };
   }
 }

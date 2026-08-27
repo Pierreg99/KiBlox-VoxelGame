@@ -18,14 +18,14 @@ Namek-Hügel, schwebende Kristallinseln, sieben Drachenkugeln, ein Drache.
 
 ## Spielen
 
-Fortschritt liegt lokal im Browser (`localStorage`, Schlüssel `kiblox-save-v2`).
+Fortschritt liegt lokal im Browser (`localStorage`, Schlüssel `kiblox-save-v4`).
 Kein Account, keine Cloud.
 
 | | |
 |---|---|
 | **Ziel** | Sieben Drachenkugeln finden, Shenron rufen, einen Wunsch wählen |
 | **Kampf** | Nahkampf, geladener Ki-Stoß, Dash, Super Saiyan ab 4500 Ki |
-| **Welt** | 128 × 64 × 128 Blöcke, Chunks 16³, Höhlen, Wasser, Namek-Bäume, Ki-Inseln |
+| **Welt** | 128 × 80 × 128 Blöcke, Pfade, Wasserfälle, Lehm-Kuppeln, Zikkurat, Ki-Haine |
 | **Bauen** | Halten = abbauen, Rechtsklick / Platzieren-Taste = setzen, Hotbar 1–5 |
 
 ### Steuerung
@@ -36,7 +36,7 @@ Kein Account, keine Cloud.
 |-------|--------|
 | WASD | Laufen (W vor, A links, D rechts — FPS-Strafe, kein Lenken) |
 | Maus | Umsehen (Klick sperrt den Pointer; ohne Lock: ziehen) |
-| Leertaste | Springen · in der Luft nochmal: Flugmodus |
+| Leertaste | Springen · in der Luft nochmal: Ki-Flug (folgt dem Blick, gleitet aus) |
 | Flug + Leertaste | Steigen |
 | Flug + Shift / Strg | Sinken |
 | Linksklick halten | Abbauen / schlagen |
@@ -71,7 +71,7 @@ Sind alle sieben Kugeln vereint, erscheint Shenron:
 |---|---|
 | UI | React 19, TanStack Start / Router, Tailwind v4 |
 | 3D | Three.js 0.185 — greedy-ish Chunk-Meshes, Ambient Occlusion, UnrealBloom |
-| State | Zustand HUD, `localStorage` Save v2 |
+| State | Zustand HUD, `localStorage` Save v4 |
 | Audio | Web Audio, synthetisiert (kein Sample-Pack) |
 | Input | Pointer Lock + Drag-Look, Touch-Sticks, Gamepad |
 

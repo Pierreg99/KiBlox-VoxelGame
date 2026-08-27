@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { AIR, CHUNK, KI, LEAVES, SX, SY, SZ, WATER } from "./constants";
-import { ATLAS_COLS, faceTile } from "./textures";
+import { AIR, CHUNK, CLOUD, KI, LEAVES, SX, SY, SZ, WATER } from "./constants";
+import { ATLAS_COLS, TILE_SIZE, faceTile } from "./textures";
 import type { World } from "./world";
 
 const DIRS: [number, number, number][] = [
@@ -62,14 +62,14 @@ const FACE_SHADE = [0.76, 0.76, 1.05, 0.48, 0.86, 0.62];
 
 function opaque(world: World, x: number, y: number, z: number) {
   const b = world.get(x, y, z);
-  return b !== AIR && b !== LEAVES && b !== WATER;
+  return b !== AIR && b !== LEAVES && b !== WATER && b !== CLOUD;
 }
 
 function tileUv(tile: number, u: number, v: number): [number, number] {
   const col = tile % ATLAS_COLS;
   const row = Math.floor(tile / ATLAS_COLS);
   const su = 1 / ATLAS_COLS;
-  const inset = 0.5 / 32 / ATLAS_COLS + 0.001;
+  const inset = 0.5 / TILE_SIZE / ATLAS_COLS + 0.001;
   return [col * su + inset + u * (su - inset * 2), 1 - (row * su + inset + (1 - v) * (su - inset * 2))];
 }
 
@@ -137,7 +137,7 @@ export function meshChunk(world: World, cx: number, cy: number, cz: number): THR
         const wz = oz + lz;
         const block = world.get(wx, wy, wz);
         if (block === AIR) continue;
-        const leaf = block === LEAVES;
+        const leaf = block === LEAVES || block === CLOUD;
         const water = block === WATER;
         for (let f = 0; f < 6; f++) {
           const [dx, dy, dz] = DIRS[f]!;

@@ -264,8 +264,14 @@ function TitleOverlay({
 }) {
   const hud = useHud();
   return (
-    <div className="absolute inset-0 z-30 flex flex-col items-center justify-end bg-[linear-gradient(to_top,var(--color-bg)_0%,transparent_48%)] px-5 pb-20 pt-12 sm:justify-center sm:bg-[linear-gradient(to_top,color-mix(in_oklab,var(--color-bg)_88%,transparent)_0%,transparent_55%)] sm:pb-0">
-      <div className="w-full max-w-md rounded-xl bg-surface/80 p-5 shadow-panel ring-1 ring-border backdrop-blur-sm sm:p-8">
+    <div className="absolute inset-0 z-30 flex flex-col items-center justify-end px-5 pb-20 pt-12 sm:justify-center sm:pb-0">
+      <img
+        src="/game/title.jpg"
+        alt=""
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+      />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,var(--color-bg)_0%,transparent_52%)] sm:bg-[linear-gradient(to_top,color-mix(in_oklab,var(--color-bg)_78%,transparent)_0%,transparent_58%)]" />
+      <div className="relative w-full max-w-md rounded-xl bg-surface/80 p-5 shadow-panel ring-1 ring-border backdrop-blur-sm sm:p-8">
         <p className="text-xs font-medium tracking-[0.22em] text-muted uppercase">Namek · Erde · Orbit</p>
         <h1 className="font-display mt-1 text-6xl leading-none tracking-wide text-fg sm:text-7xl">
           KI BLOX
@@ -300,11 +306,11 @@ function TitleOverlay({
           </button>
         </div>
         <p className="mt-4 text-xs leading-relaxed text-subtle sm:hidden">
-          Stick links, Blick rechts. Flug halten = steigen, loslassen = sinken. Hotbar antippen.
+          Stick links, Blick rechts. Flug: Blickrichtung. Halten = steigen, loslassen = sinken.
         </p>
         <ul className="mt-6 hidden space-y-1 text-xs leading-relaxed text-subtle sm:block">
-          <li>WASD bewegen · Maus umsehen · Leertaste springen, in der Luft nochmal: Flug</li>
-          <li>Flug: Leertaste steigen · Shift/Strg sinken · Halten abbauen · Rechtsklick setzen</li>
+          <li>WASD bewegen · Maus umsehen · Leertaste springen, in der Luft nochmal: Ki-Flug</li>
+          <li>Flug folgt dem Blick und gleitet aus · Leertaste steigen · Shift/Strg sinken</li>
           <li>Q halten, loslassen für Ki-Stoß · R Dash · F Super Saiyan · 1–5 Blöcke · ESC Pause</li>
         </ul>
       </div>

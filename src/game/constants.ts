@@ -1,9 +1,9 @@
 export const CHUNK = 16;
 export const CX = 8;
-export const CY = 4;
+export const CY = 5;
 export const CZ = 8;
 export const SX = CX * CHUNK; // 128
-export const SY = CY * CHUNK; // 64
+export const SY = CY * CHUNK; // 80
 export const SZ = CZ * CHUNK; // 128
 
 export const AIR = 0;
@@ -17,8 +17,12 @@ export const KI = 7;
 export const BEDROCK = 8;
 export const WATER = 9;
 export const MOSS = 10;
+export const TEMPLE = 11;
+export const CLAY = 12;
+export const CLOUD = 13;
+export const PATH = 14;
 
-export const BLOCK_COUNT = 11;
+export const BLOCK_COUNT = 15;
 
 export const BLOCK_NAMES: Record<number, string> = {
   [AIR]: "Luft",
@@ -32,6 +36,10 @@ export const BLOCK_NAMES: Record<number, string> = {
   [BEDROCK]: "Grundstein",
   [WATER]: "Wasser",
   [MOSS]: "Moosstein",
+  [TEMPLE]: "Tempelstein",
+  [CLAY]: "Lehm",
+  [CLOUD]: "Wolkenflaum",
+  [PATH]: "Pfad",
 };
 
 /** Seconds to mine while holding the strike button. */
@@ -47,6 +55,10 @@ export const BLOCK_HARDNESS: Record<number, number> = {
   [KI]: 0.38,
   [WATER]: 0,
   [BEDROCK]: 99,
+  [TEMPLE]: 0.9,
+  [CLAY]: 0.22,
+  [CLOUD]: 0.12,
+  [PATH]: 0.2,
 };
 
 export const HOTBAR = [GRASS, DIRT, STONE, WOOD, KI] as const;
@@ -54,19 +66,27 @@ export const HOTBAR = [GRASS, DIRT, STONE, WOOD, KI] as const;
 export const PLAYER_HW = 0.32;
 export const PLAYER_H = 1.72;
 export const EYE = 1.52;
-export const WALK_SPEED = 6.4;
-export const SPRINT_SPEED = 9.8;
-export const FLY_SPEED = 16;
+export const WALK_SPEED = 6.9;
+export const SPRINT_SPEED = 11.2;
+export const FLY_SPEED = 20;
 export const SSJ_MUL = 1.75;
-export const JUMP_VEL = 8.6;
-export const GRAVITY = 24;
+export const JUMP_VEL = 9.1;
+export const GRAVITY = 28;
+export const WALK_ACCEL = 80;
+export const AIR_ACCEL = 22;
+export const FLY_ACCEL = 26;
+export const FLY_DRAG = 7;
+export const COYOTE_TIME = 0.16;
+export const JUMP_BUFFER = 0.14;
+export const STEP_HEIGHT = 1.08;
+export const SNAP_DOWN = 0.55;
 export const SSJ_POWER = 4500;
 export const MAX_HEALTH = 100;
 export const START_POWER = 320;
 export const MAX_ENERGY = 100;
 export const REACH = 6.8;
 export const BALL_COUNT = 7;
-export const SEA_LEVEL = 15;
+export const SEA_LEVEL = 16;
 
-export const SAVE_KEY = "kiblox-save-v2";
-export const SAVE_VERSION = 2;
+export const SAVE_KEY = "kiblox-save-v4";
+export const SAVE_VERSION = 4;

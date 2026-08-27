@@ -2,10 +2,10 @@
 
 Kein Versprechen auf Termine. Reihenfolge = Nutzen fürs Spielgefühl.
 
-## Jetzt spielbar (v0.2)
+## Jetzt spielbar (v0.4)
 
-Singleplayer-Voxel-Loop: bauen, fliegen, Ki, sieben Kugeln, drei Wünsche.
-Steuerung Desktop / Touch / Pad. Save lokal.
+Singleplayer-Voxel-Loop: bauen, Ki-Flug entlang des Blicks, sieben Kugeln, drei Wünsche.
+Eigene Block-Atlas, Landmarken, Save lokal (`kiblox-save-v4`).
 
 ## Als Nächstes
 
@@ -25,7 +25,7 @@ Kleine Schritte, die die bestehende Welt besser machen:
 - [ ] Einfaches Inventar (9 Slots) statt fester Hotbar
 - [ ] Transformationen jenseits Super Saiyan (Kost + Look, kein Skilltree)
 - [ ] Tageszeit / Wetter als Wunsch- oder Welt-Flag
-- [ ] Mehr Landmarken (Turm, Arena, Kristallsee)
+- [x] Mehr Landmarken (Turm, Zikkurat, Kristallhaine, Pfade)
 - [ ] Seed teilen (URL `?seed=`), gleicher Stand ohne Cloud
 
 ## Später / vielleicht
