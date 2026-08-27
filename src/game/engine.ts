@@ -174,6 +174,7 @@ export class GameEngine {
   private toastT = 0;
   private orbitT = 0;
   private raf = 0;
+  private pump = 0;
   private last = 0;
   private acc = 0;
   private disposed = false;
@@ -297,20 +298,23 @@ export class GameEngine {
 
   async start() {
     if (this.disposed) return;
-    const [atlas, skyTex, kiTex, ballImg] = await Promise.all([
+    useHud.getState().patch({ loadProgress: 0.05 });
+    const texP = Promise.all([
       loadAtlasTexture(),
       loadGameTexture("/game/sky.jpg"),
       loadGameTexture("/game/ki-orb.png"),
       loadHtmlImage("/game/ball.png"),
     ]);
-    if (this.disposed) return;
-    this.atlas.dispose();
-    this.atlas = atlas;
-    this.terrainMat.map = atlas;
-    this.terrainMat.needsUpdate = true;
-    if (skyTex) this.applySkyTex(skyTex);
-    this.kiOrbTex = kiTex;
-    this.ballBase = ballImg;
+    void texP.then(([atlas, skyTex, kiTex, ballImg]) => {
+      if (this.disposed) return;
+      this.atlas.dispose();
+      this.atlas = atlas;
+      this.terrainMat.map = atlas;
+      this.terrainMat.needsUpdate = true;
+      if (skyTex) this.applySkyTex(skyTex);
+      this.kiOrbTex = kiTex;
+      this.ballBase = ballImg;
+    });
 
     const existing = loadSave();
     if (existing) {
@@ -367,36 +371,59 @@ export class GameEngine {
       ssjReady: this.power >= SSJ_POWER,
       hasSave: hasSave(),
     });
+    this.beginLoop();
+  }
+
+  private async buildAllChunks() {
+    const scx = Math.max(0, Math.min(CX - 1, Math.floor(this.px / CHUNK)));
+    const scy = Math.max(0, Math.min(CY - 1, Math.floor(this.py / CHUNK)));
+    const scz = Math.max(0, Math.min(CZ - 1, Math.floor(this.pz / CHUNK)));
+    const order: [number, number, number, number][] = [];
+    for (let cy = 0; cy < CY; cy++) {
+      for (let cz = 0; cz < CZ; cz++) {
+        for (let cx = 0; cx < CX; cx++) {
+          const d = Math.abs(cx - scx) + Math.abs(cy - scy) + Math.abs(cz - scz);
+          order.push([d, cx, cy, cz]);
+        }
+      }
+    }
+    order.sort((a, b) => a[0] - b[0]);
+    const total = order.length;
+    let n = 0;
+    for (const [, cx, cy, cz] of order) {
+      this.rebuildChunk(cx, cy, cz);
+      n++;
+      if (n % 8 === 0) {
+        useHud.getState().patch({ loadProgress: 0.44 + (n / total) * 0.54 });
+        await yieldFrame();
+        if (this.disposed) return;
+      }
+    }
+  }
+
+  private beginLoop() {
     this.last = performance.now();
     this.titleCam();
     this.render(0);
     const loop = (now: number) => {
       if (this.disposed) return;
       this.raf = requestAnimationFrame(loop);
-      let dt = (now - this.last) / 1000;
-      this.last = now;
-      dt = Math.min(dt, 0.1);
-      this.frame(dt);
+      this.tick(now);
     };
     this.raf = requestAnimationFrame(loop);
+    if (this.pump) clearInterval(this.pump);
+    this.pump = window.setInterval(() => {
+      if (this.disposed) return;
+      const now = performance.now();
+      if (now - this.last > 80) this.tick(now);
+    }, 50);
   }
 
-  private async buildAllChunks() {
-    let n = 0;
-    const total = CX * CY * CZ;
-    for (let cy = 0; cy < CY; cy++) {
-      for (let cz = 0; cz < CZ; cz++) {
-        for (let cx = 0; cx < CX; cx++) {
-          this.rebuildChunk(cx, cy, cz);
-          n++;
-          if (n % 10 === 0) {
-            useHud.getState().patch({ loadProgress: 0.18 + (n / total) * 0.78 });
-            await yieldFrame();
-            if (this.disposed) return;
-          }
-        }
-      }
-    }
+  private tick(now: number) {
+    let dt = (now - this.last) / 1000;
+    this.last = now;
+    dt = Math.min(dt, 0.1);
+    this.frame(dt);
   }
 
   private rebuildChunk(cx: number, cy: number, cz: number) {
@@ -2032,6 +2059,10 @@ export class GameEngine {
   dispose() {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
+    if (this.pump) {
+      clearInterval(this.pump);
+      this.pump = 0;
+    }
     this.flushSave();
     this.input.dispose();
     window.removeEventListener("resize", this.onResize);
@@ -2085,15 +2116,43 @@ export class GameEngine {
 }
 
 function yieldFrame() {
-  return new Promise<void>((r) => requestAnimationFrame(() => r()));
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    setTimeout(done, 0);
+    try {
+      const ch = new MessageChannel();
+      ch.port1.onmessage = done;
+      ch.port2.postMessage(0);
+    } catch {
+      /* setTimeout covers this */
+    }
+  });
 }
 
 function loadHtmlImage(url: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
+    let settled = false;
+    const finish = (img: HTMLImageElement | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(img);
+    };
+    const t = window.setTimeout(() => finish(null), 4000);
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
+    img.onload = () => {
+      window.clearTimeout(t);
+      finish(img);
+    };
+    img.onerror = () => {
+      window.clearTimeout(t);
+      finish(null);
+    };
     img.src = url;
   });
 }

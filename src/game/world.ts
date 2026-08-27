@@ -69,8 +69,20 @@ function disk(dx: number, dz: number, r: number) {
 
 function yieldThread() {
   return new Promise<void>((resolve) => {
-    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve());
-    else setTimeout(resolve, 0);
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    setTimeout(done, 0);
+    try {
+      const ch = new MessageChannel();
+      ch.port1.onmessage = done;
+      ch.port2.postMessage(0);
+    } catch {
+      /* setTimeout covers this */
+    }
   });
 }
 
@@ -216,12 +228,18 @@ export class World {
           if (y === 0) id = BEDROCK;
           else if (y < h - 5) {
             id = STONE;
-            const cave = noise3(x * 0.06, y * 0.085, z * 0.06);
-            const ravine = Math.abs(noiseRav(x * 0.035, y * 0.04, z * 0.035));
-            if (y > 4 && y < h - 2 && cave > 0.52) id = AIR;
-            else if (y > 6 && y < h - 1 && ravine < 0.07 && elev > 0.28) id = AIR;
-            else if (cave > 0.38 && cave < 0.46 && rngC() < 0.22) id = KI;
-            else if (rngC() < 0.012) id = KI;
+            if (y > 4) {
+              const cave = noise3(x * 0.06, y * 0.085, z * 0.06);
+              if (y < h - 2 && cave > 0.52) id = AIR;
+              else if (y > 6) {
+                const ravine = Math.abs(noiseRav(x * 0.035, y * 0.04, z * 0.035));
+                if (y < h - 1 && ravine < 0.07 && elev > 0.28) id = AIR;
+              }
+              if (id === STONE) {
+                if (cave > 0.38 && cave < 0.46 && rngC() < 0.22) id = KI;
+                else if (rngC() < 0.012) id = KI;
+              }
+            } else if (rngC() < 0.012) id = KI;
           } else if (y < h - 1) {
             id = elev > 0.7 ? STONE : DIRT;
           } else if (y === h) {

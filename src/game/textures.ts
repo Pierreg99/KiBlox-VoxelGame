@@ -241,30 +241,54 @@ export function createAtlasTexture(): THREE.CanvasTexture {
 
 export function loadAtlasTexture(): Promise<THREE.Texture> {
   return new Promise((resolve) => {
+    let settled = false;
+    const finish = (tex: THREE.Texture) => {
+      if (settled) return;
+      settled = true;
+      resolve(tex);
+    };
+    const t = window.setTimeout(() => finish(createAtlasTexture()), 4000);
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin("anonymous");
     loader.load(
       "/game/atlas.png",
-      (tex) => resolve(styleAtlas(tex)),
+      (tex) => {
+        window.clearTimeout(t);
+        finish(styleAtlas(tex));
+      },
       undefined,
-      () => resolve(createAtlasTexture()),
+      () => {
+        window.clearTimeout(t);
+        finish(createAtlasTexture());
+      },
     );
   });
 }
 
 export function loadGameTexture(url: string): Promise<THREE.Texture | null> {
   return new Promise((resolve) => {
+    let settled = false;
+    const finish = (tex: THREE.Texture | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(tex);
+    };
+    const t = window.setTimeout(() => finish(null), 4000);
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin("anonymous");
     loader.load(
       url,
       (tex) => {
+        window.clearTimeout(t);
         tex.colorSpace = THREE.SRGBColorSpace;
         tex.needsUpdate = true;
-        resolve(tex);
+        finish(tex);
       },
       undefined,
-      () => resolve(null),
+      () => {
+        window.clearTimeout(t);
+        finish(null);
+      },
     );
   });
 }

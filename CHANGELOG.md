@@ -4,6 +4,7 @@
 
 - World actually draws after Spielen (direct renderer, no bloom pass that went black)
 - Load bar moves while the island generates; Spielen is ready as soon as the title is up
+- Load no longer stalls if animation frames are paused (preview / background tab)
 
 ## 0.4.0 — 2026-08-27
 

@@ -23,21 +23,26 @@ export function GameApp() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    let cancelled = false;
+    let alive = true;
     let engine: GameEngine | null = null;
-    void import("@/game/engine")
-      .then(({ GameEngine }) => {
-        if (cancelled || !canvasRef.current) return;
+    const failTimer = window.setTimeout(() => {
+      if (alive && useHud.getState().phase === "loading") setFail(true);
+    }, 25000);
+    void (async () => {
+      try {
+        const { GameEngine } = await import("@/game/engine");
+        if (!alive || !canvasRef.current) return;
         engine = new GameEngine(canvasRef.current);
         engineRef.current = engine;
-        return engine.start();
-      })
-      .catch((err) => {
+        await engine.start();
+      } catch (err) {
         console.error(err);
-        if (!cancelled) setFail(true);
-      });
+        if (alive) setFail(true);
+      }
+    })();
     return () => {
-      cancelled = true;
+      alive = false;
+      window.clearTimeout(failTimer);
       engine?.dispose();
       engineRef.current = null;
     };
